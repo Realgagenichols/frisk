@@ -67,8 +67,10 @@ def suppress_overlaps(findings: list[Finding]) -> list[Finding]:
     unspanned = [f for f in findings if f.evidence.span is None]
 
     def precedence(f: Finding) -> tuple:
+        # Total order: message/category break ties so the survivor never depends on
+        # input order, even for two same-detector patterns matching the same span.
         start, end = f.evidence.span  # type: ignore[misc]
-        return (-f.severity, -(end - start), f.detector, start)
+        return (-f.severity, -(end - start), f.detector, start, f.evidence.category, f.message)
 
     kept: list[Finding] = []
     for finding in sorted(spanned, key=precedence):

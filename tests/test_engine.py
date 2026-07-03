@@ -92,6 +92,27 @@ def test_non_overlapping_matches_both_kept():
     assert len(suppress_overlaps([a, b])) == 2
 
 
+def test_touching_spans_are_not_overlapping():
+    # Half-open boundary: (0,5) and (5,10) share no character — both must survive.
+    a = finding(detector="D1", span=(0, 5))
+    b = finding(detector="D2", span=(5, 10))
+    assert len(suppress_overlaps([a, b])) == 2
+
+
+def test_identical_spans_deterministic_regardless_of_input_order():
+    # Same detector/severity/span, different message: survivor must not depend on order.
+    a = finding(detector="D1", span=(0, 5))
+    b = Finding(
+        detector="D1",
+        severity=a.severity,
+        item_ref=a.item_ref,
+        field=a.field,
+        message="other pattern",
+        evidence=a.evidence,
+    )
+    assert suppress_overlaps([a, b]) == suppress_overlaps([b, a])
+
+
 def test_same_span_different_fields_both_kept():
     a = finding(detector="D1", field="description", span=(0, 5))
     b = finding(detector="D1", field="name", span=(0, 5))
