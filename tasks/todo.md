@@ -50,8 +50,8 @@ before marking a section done (Pattern 10).
 - [x] 9.2 Tests: `read_file` on an unrelated third-party server → MEDIUM; benign legitimately-named tool in-context NOT flagged — R11, N2
 
 ## 10. D7 — metadata hygiene — R16
-- [ ] 10.1 D7: code sourced from remote/unpinned location; suspicious or missing server identity metadata — low severity — R16
-- [ ] 10.2 Tests: unpinned/remote source → LOW/INFO; benign pinned + identified server NOT flagged — R16, N2
+- [x] 10.1 D7: code sourced from remote/unpinned location; suspicious or missing server identity metadata — low severity — R16
+- [x] 10.2 Tests: unpinned/remote source → LOW/INFO; benign pinned + identified server NOT flagged — R16, N2
 
 ## 11. Risk score & verdict — R13
 - [ ] 11.1 Weighted risk score + overall verdict (`pass`/`warn`/`fail`) from findings in `frisk/core/score.py` — R13

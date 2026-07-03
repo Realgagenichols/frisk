@@ -7,12 +7,15 @@ from frisk.core.detectors.d2_hidden import HiddenContent
 from frisk.core.detectors.d3_sensitive_params import SensitiveParams
 from frisk.core.detectors.d4_scope import ScopeMismatch
 from frisk.core.detectors.d5_shadowing import Shadowing
+from frisk.core.detectors.d7_hygiene import MetadataHygiene
 from frisk.core.engine import Detector
 
+# D6 (rug-pull) is not a definition detector: it lives in the lockfile/verify layer.
 ALL_DETECTORS: list[Detector] = [
     InstructionInjection(),
     HiddenContent(),
     SensitiveParams(),
     ScopeMismatch(),
     Shadowing(),
+    MetadataHygiene(),
 ]
