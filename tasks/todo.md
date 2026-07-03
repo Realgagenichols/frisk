@@ -26,7 +26,7 @@ before marking a section done (Pattern 10).
 - [x] 3.5 Tests: raising detector → a finding (not empty); two overlapping matches → only most-specific kept; evidence helper drops a sentinel secret — R12, S3, Patterns 1 & 6
 
 ## 4. Shared detection corpus — N2, N3
-- [ ] 4.1 Build `tests/fixtures/definitions.py`: a poisoned + benign twin for every detector D1–D7 (dicts usable both by unit tests and the fixture server) — N2, N3
+- [x] 4.1 Build `tests/fixtures/definitions.py`: a poisoned + benign twin for every detector D1–D7 (dicts usable both by unit tests and the fixture server) — N2, N3
 
 ## 5. D1 — instruction injection — R7
 - [ ] 5.1 D1 over name/description: imperative read-file/env/secret directives, "ignore previous instructions", `<IMPORTANT>`-style pseudo-tags, "pass hidden value as `X` param" — HIGH — R7
