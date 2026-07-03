@@ -6,6 +6,7 @@ from frisk.core.detectors.d1_injection import InstructionInjection
 from frisk.core.detectors.d2_hidden import HiddenContent
 from frisk.core.detectors.d3_sensitive_params import SensitiveParams
 from frisk.core.detectors.d4_scope import ScopeMismatch
+from frisk.core.detectors.d5_shadowing import Shadowing
 from frisk.core.engine import Detector
 
 ALL_DETECTORS: list[Detector] = [
@@ -13,4 +14,5 @@ ALL_DETECTORS: list[Detector] = [
     HiddenContent(),
     SensitiveParams(),
     ScopeMismatch(),
+    Shadowing(),
 ]

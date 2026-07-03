@@ -46,8 +46,8 @@ before marking a section done (Pattern 10).
 - [x] 8.2 Tests: `get_weather` with a `command` param → MEDIUM; benign honestly-described shell tool NOT over-flagged — R10, N2
 
 ## 9. D5 — shadowing / impersonation — R11
-- [ ] 9.1 D5: names impersonating common tools; descriptions steering toward/away from other servers ("always use this instead of …") — MEDIUM — R11
-- [ ] 9.2 Tests: `read_file` on an unrelated third-party server → MEDIUM; benign legitimately-named tool in-context NOT flagged — R11, N2
+- [x] 9.1 D5: names impersonating common tools; descriptions steering toward/away from other servers ("always use this instead of …") — MEDIUM — R11
+- [x] 9.2 Tests: `read_file` on an unrelated third-party server → MEDIUM; benign legitimately-named tool in-context NOT flagged — R11, N2
 
 ## 10. D7 — metadata hygiene — R16
 - [ ] 10.1 D7: code sourced from remote/unpinned location; suspicious or missing server identity metadata — low severity — R16
