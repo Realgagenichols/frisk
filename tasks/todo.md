@@ -38,12 +38,12 @@ before marking a section done (Pattern 10).
 - [x] 6.3 Test: U+2028/2029/0085 and multi-byte chars — offsets stay byte-accurate, no `splitlines()` drift — R8, Pattern 13
 
 ## 7. D3 — sensitive-parameter capture — R9
-- [ ] 7.1 D3 over `inputSchema`: props soliciting conversation history, env vars, file contents, credentials/tokens, or a generic `context`/`metadata` catch-all — MEDIUM — R9
-- [ ] 7.2 Tests: required `full_conversation` string → MEDIUM naming the property; benign narrow `context` (bounded enum) NOT flagged — R9, N2
+- [x] 7.1 D3 over `inputSchema`: props soliciting conversation history, env vars, file contents, credentials/tokens, or a generic `context`/`metadata` catch-all — MEDIUM — R9
+- [x] 7.2 Tests: required `full_conversation` string → MEDIUM naming the property; benign narrow `context` (bounded enum) NOT flagged — R9, N2
 
 ## 8. D4 — capability / scope mismatch — R10
-- [ ] 8.1 D4: narrow-purpose tool requesting shell/file/network params; flag servers advertising exec/file primitives — MEDIUM — R10
-- [ ] 8.2 Tests: `get_weather` with a `command` param → MEDIUM; benign honestly-described shell tool NOT over-flagged — R10, N2
+- [x] 8.1 D4: narrow-purpose tool requesting shell/file/network params; flag servers advertising exec/file primitives — MEDIUM — R10
+- [x] 8.2 Tests: `get_weather` with a `command` param → MEDIUM; benign honestly-described shell tool NOT over-flagged — R10, N2
 
 ## 9. D5 — shadowing / impersonation — R11
 - [ ] 9.1 D5: names impersonating common tools; descriptions steering toward/away from other servers ("always use this instead of …") — MEDIUM — R11
