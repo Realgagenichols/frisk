@@ -106,8 +106,10 @@ def _walk(path: str, node: Any) -> Iterator[tuple[str, str]]:
     elif isinstance(node, dict):
         for key, value in node.items():
             child = f"{path}.{key}"
-            # The key itself is a string leaf — property names matter for D3 (R9).
-            yield (child, key)
+            # The key itself is a string leaf — property names matter for D3 (R9). It gets a
+            # distinct `#key` path so every field_path resolves to exactly ONE string and
+            # evidence offsets stay unambiguous (R12).
+            yield (f"{child}#key", key)
             yield from _walk(child, value)
     elif isinstance(node, list):
         for index, value in enumerate(node):

@@ -73,10 +73,19 @@ def test_leaf_walker_yields_property_names_and_values():
     }
     item = make_item(input_schema=schema)
     leaves = list(iter_string_leaves(item))
-    # The property NAME is exposed as a leaf (needed by D3).
-    assert ("inputSchema.properties.full_conversation", "full_conversation") in leaves
+    # The property NAME is exposed as a leaf (needed by D3), on a distinct `#key` path.
+    assert ("inputSchema.properties.full_conversation#key", "full_conversation") in leaves
     # ...as is its nested description value.
     assert ("inputSchema.properties.full_conversation.description", "all history") in leaves
+
+
+def test_leaf_walker_field_paths_are_unique():
+    # R12: evidence anchors (field_path, offset) — so every path must map to exactly one
+    # string. Dict keys and their string values previously collided on the same path.
+    schema = {"type": "object", "properties": {"q": {"type": "string"}}}
+    item = make_item(input_schema=schema)
+    paths = [p for p, _ in iter_string_leaves(item)]
+    assert len(paths) == len(set(paths)), f"duplicate field paths: {paths}"
 
 
 def test_leaf_walker_preserves_raw_control_chars_not_escaped():
