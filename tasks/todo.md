@@ -13,10 +13,10 @@ before marking a section done (Pattern 10).
 - [x] 1.5 Verify: `uv run frisk --help` works and `uv run pytest` collects zero-fail — N3
 
 ## 2. Inventory & Finding models — R5, R12
-- [ ] 2.1 `Item` (kind, name, description, input_schema, raw_bytes) + `Inventory` dataclasses in `frisk/core/models.py` — R5
-- [ ] 2.2 `Severity` enum (INFO/LOW/MEDIUM/HIGH/CRITICAL) + `Finding` (detector, severity, item ref, field, evidence = offset/span + sanitized text) — R12
-- [ ] 2.3 `iter_string_leaves(item)`: yields `(field_path, raw_str)` for name, description, and every schema property name/description/enum — RAW strings, never a `json.dumps` blob — Pattern 12, R12
-- [ ] 2.4 Tests: models round-trip; leaf-walker preserves raw tabs/newlines/quotes (asserts NOT the escaped serialized form) — R5, Pattern 12
+- [x] 2.1 `Item` (kind, name, description, input_schema, raw_bytes) + `Inventory` dataclasses in `frisk/core/models.py` — R5
+- [x] 2.2 `Severity` enum (INFO/LOW/MEDIUM/HIGH/CRITICAL) + `Finding` (detector, severity, item ref, field, evidence = offset/span + sanitized text) — R12
+- [x] 2.3 `iter_string_leaves(item)`: yields `(field_path, raw_str)` for name, description, and every schema property name/description/enum — RAW strings, never a `json.dumps` blob — Pattern 12, R12
+- [x] 2.4 Tests: models round-trip; leaf-walker preserves raw tabs/newlines/quotes (asserts NOT the escaped serialized form) — R5, Pattern 12
 
 ## 3. Detector framework — R12, R23, N1
 - [ ] 3.1 `Detector` protocol (`run(inventory) -> list[Finding]`) + registry of D1–D7 in `frisk/core/detectors/__init__.py` — R23, N1
