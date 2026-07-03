@@ -2,9 +2,7 @@
 
 **Updated:** 2026-07-03
 **Active milestone:** M1 (CLI core). On branch `m1-cli-core`.
-**Last done:** §1 scaffolding complete (pyproject, package layout, MIT license, CLI stub). Committed.
+**Last done:** §2 models complete + section review passed (1 WARNING fixed: `#key` leaf paths). 9 tests green.
 **In progress:** none.
-**Next action:** §2 Inventory & Finding models (`frisk/core/models.py`) — R5, R12.
+**Next action:** §3 detector framework (`frisk/core/engine.py`, sanitize helpers) — R12, R23, N1.
 **Blockers:** none.
-
-M1 is large (multi-session). Section boundaries in todo.md are the checkpoints.

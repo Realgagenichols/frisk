@@ -19,11 +19,11 @@ before marking a section done (Pattern 10).
 - [x] 2.4 Tests: models round-trip; leaf-walker preserves raw tabs/newlines/quotes (asserts NOT the escaped serialized form) — R5, Pattern 12
 
 ## 3. Detector framework — R12, R23, N1
-- [ ] 3.1 `Detector` protocol (`run(inventory) -> list[Finding]`) + registry of D1–D7 in `frisk/core/detectors/__init__.py` — R23, N1
-- [ ] 3.2 Error-to-finding wrapper: a detector that raises yields a HIGH "detector errored" finding (name + type only, never raw input) — never a silent pass — R12, Patterns 6 & 11
-- [ ] 3.3 Overlap suppression: most-specific match on a span suppresses overlapping less-specific matches across detectors/patterns — R12, Pattern 1
-- [ ] 3.4 Sanitized-evidence helper: evidence = category + field_path + offset + C0-escaped span; never the raw secret/token/PII value — S3, R15, Pattern 11
-- [ ] 3.5 Tests: raising detector → a finding (not empty); two overlapping matches → only most-specific kept; evidence helper drops a sentinel secret — R12, S3, Patterns 1 & 6
+- [x] 3.1 `Detector` protocol (`run(inventory) -> list[Finding]`) + registry of D1–D7 in `frisk/core/detectors/__init__.py` — R23, N1
+- [x] 3.2 Error-to-finding wrapper: a detector that raises yields a HIGH "detector errored" finding (name + type only, never raw input) — never a silent pass — R12, Patterns 6 & 11
+- [x] 3.3 Overlap suppression: most-specific match on a span suppresses overlapping less-specific matches across detectors/patterns — R12, Pattern 1
+- [x] 3.4 Sanitized-evidence helper: evidence = category + field_path + offset + C0-escaped span; never the raw secret/token/PII value — S3, R15, Pattern 11
+- [x] 3.5 Tests: raising detector → a finding (not empty); two overlapping matches → only most-specific kept; evidence helper drops a sentinel secret — R12, S3, Patterns 1 & 6
 
 ## 4. Shared detection corpus — N2, N3
 - [ ] 4.1 Build `tests/fixtures/definitions.py`: a poisoned + benign twin for every detector D1–D7 (dicts usable both by unit tests and the fixture server) — N2, N3
