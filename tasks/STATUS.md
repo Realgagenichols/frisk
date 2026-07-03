@@ -1,12 +1,11 @@
 # STATUS — frisk
 
-**Phase:** Brainstorm complete. SPEC.md + design doc written. Awaiting user review.
-**Active milestone:** M1 (CLI core) — not yet planned.
-**Last done:** Finalized all design decisions; wrote SPEC.md, docs/design/frisk-design.md, CLAUDE.md.
+**Updated:** 2026-07-03
+**Active milestone:** M1 (CLI core) — R1–R18, S3, N1–N4. Planned, awaiting user review.
+**Last done:** Wrote `tasks/todo.md` (18 sections) mapping every M1 requirement to tasks + tests.
 **In progress:** none.
-**Next action:** User reviews SPEC.md → run `/plan` for M1.
-**Blockers:** none. Not yet a git repo; not scaffolded (no pyproject/src). Design artifacts not committed (awaiting SPEC approval).
+**Next action:** User reviews plan → run `/implement` starting at §1.1 (`uv init` scaffolding).
+**Blockers:** none. Project not yet scaffolded (no pyproject/src). Design artifacts not committed.
 
-Locked decisions: connect-and-enumerate (sandboxed) · detectors D1–D7 · Python core + Pyodide
-(single source) · seatbelt + fake HOME + rlimits sandbox · GitHub Pages browser-only playground
-+ CLI · name = frisk · milestones M1 CLI / M2 playground / M3 honeypot.
+M1 is large (multi-session). Section boundaries in todo.md are the natural checkpoints;
+overwrite this file at each stop. M2 (playground) / M3 (honeypot) planned later via `/plan`.
