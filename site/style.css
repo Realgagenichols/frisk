@@ -267,6 +267,7 @@ a:hover { color: var(--amber-hot); text-decoration: underline; }
   color: var(--paper);
   display: flex; flex-direction: column; gap: 3px;
 }
+.error-banner[hidden] { display: none; } /* author display would otherwise beat [hidden] */
 .error-banner strong { color: var(--red); letter-spacing: 0.12em; font-size: 11px; }
 .error-banner span { overflow-wrap: anywhere; }
 
@@ -289,12 +290,13 @@ a:hover { color: var(--amber-hot); text-decoration: underline; }
 
 .stamp {
   justify-self: start;
+  margin-left: 8px; /* rotation overhang stays inside the panel edge */
   transform: rotate(-4deg);
   border: 3px double currentColor;
   border-radius: 4px;
-  padding: 8px 18px;
-  font-size: 24px; font-weight: 700;
-  letter-spacing: 0.3em; text-indent: 0.3em;
+  padding: 7px 16px;
+  font-size: 22px; font-weight: 700;
+  letter-spacing: 0.26em; text-indent: 0.26em;
   text-transform: uppercase;
   opacity: 0;
   animation: stamp-in 240ms cubic-bezier(0.2, 1.6, 0.4, 1) 60ms forwards;
@@ -320,9 +322,12 @@ a:hover { color: var(--amber-hot); text-decoration: underline; }
 }
 .gauge-fill {
   height: 100%; width: 0;
-  background: linear-gradient(90deg, var(--green), var(--amber) 45%, var(--red-deep) 85%);
+  background: var(--dim); /* verdict class below sets the real color */
   transition: width 600ms cubic-bezier(0.25, 1, 0.3, 1);
 }
+.gauge-fill.pass { background: var(--green); }
+.gauge-fill.warn { background: var(--amber); }
+.gauge-fill.fail { background: linear-gradient(90deg, var(--red), var(--red-deep)); }
 
 .paste-note {
   font-size: 11.5px; color: var(--faint);

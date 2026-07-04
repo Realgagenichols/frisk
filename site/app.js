@@ -150,7 +150,7 @@ function renderReport(envelope) {
         report.highest_severity ? ` — highest: ${report.highest_severity}` : ""
       ),
       el("div", { class: "gauge" },
-        el("div", { class: "gauge-fill", id: "gauge-fill" })
+        el("div", { class: `gauge-fill ${report.verdict}`, id: "gauge-fill" })
       )
     )
   );

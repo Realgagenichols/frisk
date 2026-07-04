@@ -24,6 +24,10 @@
   `exclude_none`); paste mode hashes the pasted dict verbatim. Scanned string leaves match, so
   findings agree — but cross-channel hash comparison is only valid for round-trip-clean
   definitions. Documented in `ingest.py`; changing it would rewrite existing lock hashes.
+- **Assert visibility, not attributes; look at the pixels.** An author `display:flex` on
+  `.error-banner` silently defeated the `[hidden]` attribute; the E2E's `:not([hidden])`
+  selector passed anyway. Use `isVisible()`-style checks and review an actual screenshot —
+  the bug was only caught by looking at one.
 - **One live server validates one dialect, not the wire format.** connect.js's SSE parser
   passed against FastMCP (LF framing) but would break on sse-starlette's CRLF. Where a spec
   says "CRLF or LF", test both framings — grep the spec for optional/either constructs.

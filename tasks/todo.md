@@ -35,8 +35,8 @@
 - [x] 5.2 README: Playground section — URL, paste-mode usage, direct-connect caveats (CORS), privacy note — R20, R22
 
 ## 6. Integration & polish
-- [ ] 6.1 Local browser verification (`python -m http.server -d site`): poisoned example → findings + verdict match `frisk scan` on the equivalent fixture; benign example → clean. Record results in Review — R20, R21, R23
-- [ ] 6.2 Verify direct-connect failure path against a non-CORS URL (error + paste-mode guidance shown) — R22
+- [x] 6.1 Local browser verification (`python -m http.server -d site`): poisoned example → findings + verdict match `frisk scan` on the equivalent fixture; benign example → clean. Record results in Review — R20, R21, R23
+- [x] 6.2 Verify direct-connect failure path against a non-CORS URL (error + paste-mode guidance shown) — R22
 - [ ] 6.3 `uv run ruff check .` clean; full `uv run pytest` passes — N3
 - [ ] 6.4 Check off M2 in SPEC.md Milestones; overwrite tasks/STATUS.md
 
