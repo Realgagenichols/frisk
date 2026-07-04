@@ -33,5 +33,9 @@
 - **"File missing" has two errnos.** ENOENT (`FileNotFoundError`) and ENOTDIR
   (`NotADirectoryError`) both mean the path is gone; catching only the former let
   parent-dir tampering masquerade as an INFO inspection error (§2 review).
+- **Offsets have units; use the existing conversion helper.** Evidence.offset is a BYTE
+  offset (UTF-8) by contract, but a new `str.find` call site shipped char offsets (§3
+  review). When constructing Evidence outside `make_evidence`, grep for `.find(` feeding
+  `offset=` and test with a non-ASCII prefix.
 - **Invisible chars in source must be `\uXXXX` escapes** — corpus, detector regexes, and
   tests alike; literal ZWJ/bidi in source breaks reviewability AND exact-match editing.

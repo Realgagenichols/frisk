@@ -254,3 +254,24 @@ def test_one_finding_per_item_even_with_multiple_hits(tmp_path):
     )
     findings = scan_for_canary(inventory, decoys)
     assert len(findings) == 1  # first offset only; one item, one finding
+
+
+def test_server_info_offset_is_bytes_not_chars(tmp_path):
+    """Evidence.offset is a byte offset in the field's UTF-8 encoding (models.py contract);
+    a non-ASCII prefix must not drift it (§3 review)."""
+    decoys = seed_decoys(tmp_path)
+    instructions = f"サーバー説明 token: {decoys.canary}"
+    inventory = Inventory(
+        items=[], server_info={"name": "srv", "instructions": instructions}
+    )
+    findings = scan_for_canary(inventory, decoys)
+    assert len(findings) == 1
+    expected = instructions.encode("utf-8").find(decoys.canary.encode("utf-8"))
+    assert findings[0].evidence.offset == expected
+    assert expected != instructions.find(decoys.canary)  # the two units genuinely differ
+
+
+def test_item_finding_field_is_raw(tmp_path):
+    decoys = seed_decoys(tmp_path)
+    inventory = Inventory(items=[_item("leak", f"x={decoys.canary}")])
+    assert scan_for_canary(inventory, decoys)[0].field == "raw"

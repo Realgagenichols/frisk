@@ -155,9 +155,9 @@ def inspect_decoys(decoys: DecoySet) -> list[Finding]:
 def scan_for_canary(inventory: Inventory, decoys: DecoySet) -> list[Finding]:
     """Flag decoy credential material surfacing in the enumerated definitions (R24).
 
-    Searches each item's ``raw_bytes`` — the advertised JSON exactly as received, the
-    representation the canary would land in (Pattern 12; the canary is pure hex, which JSON
-    escaping cannot transform) — plus ``server_info`` string values. Two tokens: the full
+    Searches each item's ``raw_bytes`` — the canonical advertised JSON, in which an
+    alphanumeric token survives JSON escaping verbatim (Pattern 12; the canary is pure hex,
+    which no JSON encoder transforms) — plus ``server_info`` string values. Two tokens: the full
     canary, and the AKIA-prefixed key-id fragment (the AWS decoy's access-key-id carries
     only the first 16 canary chars, and a thief may exfiltrate just the key id). Evidence is
     category + offset only — the canary is fake, but report output never carries credential
@@ -183,7 +183,9 @@ def scan_for_canary(inventory: Inventory, decoys: DecoySet) -> list[Finding]:
                 break
     for path, value in _server_info_strings(inventory.server_info):
         for token in tokens:
-            offset = value.find(token)
+            # Evidence.offset is a BYTE offset within the field's UTF-8 encoding
+            # (models.py contract) — str.find would drift on non-ASCII prefixes.
+            offset = value.encode("utf-8").find(token.encode("utf-8"))
             if offset != -1:
                 findings.append(
                     Finding(
