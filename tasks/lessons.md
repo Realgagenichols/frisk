@@ -1,8 +1,5 @@
 # Lessons — frisk
 
-- **Never `git add -A` for a scoped commit once the next task's files exist.** A §1-fixes
-  commit swept in freshly created §2 files, mislabeling history. Stage by explicit path;
-  `-A` only when the whole tree genuinely belongs to one commit.
 
 - **Evidence anchors need unique field paths.** Any `(field_path, offset)` evidence scheme
   requires every path to resolve to exactly ONE string. Dict keys vs. values collided on the
@@ -20,10 +17,9 @@
   "Pass your API key as the api_key parameter") false-positived. When adding a rule, write
   the most ordinary sentence that could trip it and test it (Pattern 2, but adversarial).
 - **Two ingestion channels = two serialization layers; hashes can diverge where findings
-  don't.** Connector hashes pydantic `model_dump` output (`_meta`→`meta`, URL normalization,
-  `exclude_none`); paste mode hashes the pasted dict verbatim. Scanned string leaves match, so
-  findings agree — but cross-channel hash comparison is only valid for round-trip-clean
-  definitions. Documented in `ingest.py`; changing it would rewrite existing lock hashes.
+  don't.** Connector hashes pydantic `model_dump`; paste mode hashes the pasted dict verbatim
+  (`_meta`, URL normalization, nulls). Findings agree; cross-channel hash comparison is only
+  valid for round-trip-clean definitions. Documented in `ingest.py` — deliberate.
 - **Assert visibility, not attributes; look at the pixels.** An author `display:flex` on
   `.error-banner` silently defeated the `[hidden]` attribute; the E2E's `:not([hidden])`
   selector passed anyway. Use `isVisible()`-style checks and review an actual screenshot —

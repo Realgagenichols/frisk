@@ -1,11 +1,15 @@
 # STATUS — frisk
 
 **Updated:** 2026-07-04
-**Active milestone:** M2 (Playground — R20–R23), executing `tasks/todo.md`.
-**Last done:** §1 (core ingest, commit 9f75e62 + fixes 8070fc2) and §2 (Pyodide bundle,
-e76d925) complete; both section reviews passed (§1: hash-divergence limitation documented as
-deliberate; §2: drift guard hardened to inspect the built zip, commit scoping fixed).
-**In progress:** none.
-**Next action:** §3 — playground site paste mode (3.1 scaffold `site/` via frontend-design
-skill; then scan.py bootstrap, report rendering with textContent-only, examples, zero-backend).
-**Blockers:** none. Later manual step: enable GitHub Pages (Actions source) in repo settings.
+**Active milestone:** M2 (Playground) — ✅ COMPLETE, checked off in SPEC.md.
+**Last done:** M2 implemented + reviewed (10 local commits, 9f75e62..343ee1d). 178 tests,
+ruff clean, browser E2E (Playwright) recorded in archived plan `tasks/todo.2026-07-04.md`.
+All section reviews + final gate passed.
+**In progress:** none. Commits are LOCAL — not yet pushed.
+**Next action:** (1) push to origin/main — this triggers the Pages deploy workflow;
+(2) one-time manual step first: repo Settings → Pages → Source = "GitHub Actions";
+(3) then `/clear` and `/plan M3` (behavioral honeypot, R24).
+**Blockers:** none.
+
+M3 note: sandbox fake-HOME already exists (M1); R24 adds decoy credentials + access/exfil
+detection during enumeration.
