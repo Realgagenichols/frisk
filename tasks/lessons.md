@@ -24,5 +24,8 @@
   `exclude_none`); paste mode hashes the pasted dict verbatim. Scanned string leaves match, so
   findings agree — but cross-channel hash comparison is only valid for round-trip-clean
   definitions. Documented in `ingest.py`; changing it would rewrite existing lock hashes.
+- **One live server validates one dialect, not the wire format.** connect.js's SSE parser
+  passed against FastMCP (LF framing) but would break on sse-starlette's CRLF. Where a spec
+  says "CRLF or LF", test both framings — grep the spec for optional/either constructs.
 - **Invisible chars in source must be `\uXXXX` escapes** — corpus, detector regexes, and
   tests alike; literal ZWJ/bidi in source breaks reviewability AND exact-match editing.

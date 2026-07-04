@@ -32,9 +32,10 @@ function mcpHeaders(token, session, afterInit) {
 
 // Parse a text/event-stream body: return the first `data:` JSON whose id matches.
 function sseExtract(body, id) {
-  for (const event of body.split("\n\n")) {
+  // SSE permits CRLF or LF framing (sse-starlette emits CRLF) — accept both.
+  for (const event of body.split(/\r?\n\r?\n/)) {
     const data = event
-      .split("\n")
+      .split(/\r?\n/)
       .filter((line) => line.startsWith("data:"))
       .map((line) => line.slice(5).trim())
       .join("\n");
@@ -152,11 +153,11 @@ async function runDirectConnect() {
   setConnectStatus("connecting…");
   try {
     const fetched = await directConnect(url, token);
-    setConnectStatus("fetched — scanning");
-    // Same path as a paste (R23): show exactly what was fetched, then scan it.
+    // Same path as a paste (R23): show exactly what was fetched, then scan it. The scan
+    // settles asynchronously — its own report/error is the terminal status, not us.
     document.getElementById("paste-input").value = JSON.stringify(fetched, null, 2);
     runScan();
-    setConnectStatus("done — report on the right, fetched JSON on the left");
+    setConnectStatus("fetched — scanning; fetched JSON is in the paste box");
   } catch (err) {
     setConnectStatus("");
     if (err instanceof TypeError) {
