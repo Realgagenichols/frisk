@@ -32,16 +32,16 @@ exists.
       (`uv run pytest tests/test_honeypot.py`)
 
 ## 2. Access / tamper inspection
-- [ ] 2.1 `inspect_decoys(decoys) -> list[Finding]`: stat each decoy vs baseline —
+- [x] 2.1 `inspect_decoys(decoys) -> list[Finding]`: stat each decoy vs baseline —
       atime advanced → HIGH `D8` finding (category `decoy-access`); mtime/size changed →
       HIGH `decoy-tamper`; missing file → HIGH `decoy-tamper`. Evidence = decoy relative
       path + category only, NEVER file contents (S3); `item_ref` = `honeypot:<relpath>` — R24, R12, S3
-- [ ] 2.2 Inspection error path: a stat failure other than FileNotFoundError emits an INFO
+- [x] 2.2 Inspection error path: a stat failure other than FileNotFoundError emits an INFO
       `honeypot-error` finding — a detector error is a finding, never a silent pass — R12
-- [ ] 2.3 Tests: untouched decoys → no findings; `read_text()` on a decoy → `decoy-access`;
+- [x] 2.3 Tests: untouched decoys → no findings; `read_text()` on a decoy → `decoy-access`;
       append to a decoy → `decoy-tamper`; delete → `decoy-tamper`; unique field paths for
       evidence anchors (lesson: evidence anchors need unique field paths) — R24
-- [ ] 2.4 Benign-twin test (N2 + lesson "breaking-string treatment"): full seed → sleep-free
+- [x] 2.4 Benign-twin test (N2 + lesson "breaking-string treatment"): full seed → sleep-free
       no-op → inspect twice in a row stays clean; `os.stat`/`os.path.exists` on decoys by
       the inspector itself must not flip atime — N2
 

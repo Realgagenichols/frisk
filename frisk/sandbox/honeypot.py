@@ -26,6 +26,8 @@ import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
+from frisk.core.models import Evidence, Finding, Severity
+
 DETECTOR_ID = "D8"
 
 # Canary: pure hex so it drops invisibly into any credential-shaped slot (PEM body, AWS
@@ -101,6 +103,62 @@ def _pin_atime(path: Path) -> DecoyBaseline:
     os.utime(path, ns=(0, st.st_mtime_ns))
     st = path.stat()
     return DecoyBaseline(atime_ns=st.st_atime_ns, mtime_ns=st.st_mtime_ns, size=st.st_size)
+
+
+def inspect_decoys(decoys: DecoySet) -> list[Finding]:
+    """Post-enumeration stat diff against the seeded baselines.
+
+    A changed mtime/size or a missing file is tampering; an advanced atime alone is a read.
+    Tamper subsumes access — one finding per decoy, the most severe interpretation. Evidence
+    is the decoy's relative path and a category, never file contents (S3). A stat failure is
+    itself a finding — a detector error must never look like a clean pass (R12).
+    """
+    findings: list[Finding] = []
+    for relpath, baseline in decoys.baselines.items():
+        try:
+            st = os.stat(decoys.home / relpath)
+        except FileNotFoundError:
+            findings.append(
+                _finding(relpath, Severity.HIGH, "decoy-tamper", "decoy credential file deleted")
+            )
+            continue
+        except OSError as exc:
+            findings.append(
+                _finding(
+                    relpath,
+                    Severity.INFO,
+                    "honeypot-error",
+                    f"could not inspect decoy: {type(exc).__name__}",
+                )
+            )
+            continue
+        if st.st_mtime_ns != baseline.mtime_ns or st.st_size != baseline.size:
+            findings.append(
+                _finding(
+                    relpath, Severity.HIGH, "decoy-tamper", "decoy credential file modified"
+                )
+            )
+        elif st.st_atime_ns > baseline.atime_ns:
+            findings.append(
+                _finding(
+                    relpath,
+                    Severity.HIGH,
+                    "decoy-access",
+                    "decoy credential file read during enumeration",
+                )
+            )
+    return findings
+
+
+def _finding(relpath: str, severity: Severity, category: str, message: str) -> Finding:
+    return Finding(
+        detector=DETECTOR_ID,
+        severity=severity,
+        item_ref=f"honeypot:{relpath}",
+        field="file",
+        message=message,
+        evidence=Evidence(category=category),
+    )
 
 
 def _probe_atime(fake_home: Path) -> bool:
