@@ -104,9 +104,15 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     else:
         sys.stdout.write(render_human(inventory, findings, assessment))
     if not args.no_lock:
-        write_lock(args.lock, inventory)
-        if args.format != "json":
-            print(f"\nwrote baseline: {args.lock}", file=sys.stderr)
+        try:
+            write_lock(args.lock, inventory)
+            if args.format != "json":
+                print(f"\nwrote baseline: {args.lock}", file=sys.stderr)
+        except OSError as exc:
+            # The verdict is the primary output; a failed baseline write is a warning, not a
+            # crash — and must not mask the risk exit code.
+            print(f"warning: could not write lockfile {args.lock}: {type(exc).__name__}",
+                  file=sys.stderr)
     return exit_code(assessment)
 
 

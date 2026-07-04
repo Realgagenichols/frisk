@@ -112,3 +112,12 @@ def test_scan_unreachable_target_fails_loudly_nonzero():
     result = run_frisk("scan", "/nonexistent/frisk-no-such-server", "--no-lock")
     assert result.returncode != 0
     assert "error:" in result.stderr  # specific, actionable — not "0 findings"
+
+
+def test_scan_unwritable_lock_warns_but_keeps_verdict(tmp_path):
+    # A failed baseline write must not mask the risk verdict/exit code, and must not crash.
+    unwritable = tmp_path / "nonexistent-dir" / "frisk.lock"
+    result = run_frisk(*scan_args("poisoned", "--lock", str(unwritable)))
+    assert result.returncode == 2  # verdict preserved
+    assert "could not write lockfile" in result.stderr
+    assert "Traceback" not in result.stderr  # degraded gracefully
