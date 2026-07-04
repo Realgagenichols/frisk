@@ -25,10 +25,10 @@
 - [x] 3.6 Zero-backend audit: page makes no requests except the pinned Pyodide CDN and same-origin assets; no analytics, no storage; footer states nothing leaves the browser — R22
 
 ## 4. Direct-connect (best-effort CORS)
-- [ ] 4.1 `site/connect.js`: minimal MCP streamable-HTTP client via `fetch` — JSON-RPC `initialize` handshake, then `tools/list`, `resources/list`, `prompts/list`; optional Bearer token from a `type=password` input. (Connector logic, not detector logic — a JS transport doesn't violate R23) — R22
-- [ ] 4.2 Feed fetched lists through the exact same `scan_json` path as paste mode — one scan path, no divergence — R22, R23
-- [ ] 4.3 Token hygiene: token held in memory only (no localStorage/cookies/URL params), sent only to the user-typed target URL — R22, S3
-- [ ] 4.4 CORS/network failure → specific error naming the failure + guidance to fall back to paste mode; never renders a clean report from a failed fetch (R6 spirit) — R22
+- [x] 4.1 `site/connect.js`: minimal MCP streamable-HTTP client via `fetch` — JSON-RPC `initialize` handshake, then `tools/list`, `resources/list`, `prompts/list`; optional Bearer token from a `type=password` input. (Connector logic, not detector logic — a JS transport doesn't violate R23) — R22
+- [x] 4.2 Feed fetched lists through the exact same `scan_json` path as paste mode — one scan path, no divergence — R22, R23
+- [x] 4.3 Token hygiene: token held in memory only (no localStorage/cookies/URL params), sent only to the user-typed target URL — R22, S3
+- [x] 4.4 CORS/network failure → specific error naming the failure + guidance to fall back to paste mode; never renders a clean report from a failed fetch (R6 spirit) — R22
 
 ## 5. Deploy
 - [ ] 5.1 `.github/workflows/pages.yml`: on push to `main` — checkout, `python scripts/build_site.py`, upload `site/` artifact, deploy to GitHub Pages (note: enabling Pages "GitHub Actions" source in repo settings is a manual step for Gage) — R20

@@ -97,6 +97,15 @@ const FRISK_EXAMPLES = {
           required: ["text", "target_lang"],
         },
       },
+      {
+        name: "get_weather",
+        description: "Returns the weather for a city.",
+        inputSchema: {
+          type: "object",
+          properties: { city: { type: "string", description: "City name." } },
+          required: ["city"],
+        },
+      },
     ],
     serverInfo: { name: "docs-server", version: "1.2.3" },
   },

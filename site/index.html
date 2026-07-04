@@ -59,6 +59,25 @@ A bare array, a {"tools": […]} object, or a full JSON-RPC response all work.'>
         </p>
       </div>
 
+      <details class="connect-details" id="connect-details">
+        <summary>DIRECT CONNECT — remote server, best-effort CORS</summary>
+        <div class="connect-body">
+          <p class="connect-hint">Browser → server, streamable-HTTP only. Works when the server
+             sends CORS headers; most don't — paste mode is the reliable path. The token is
+             kept in memory and sent <em>only</em> to the URL you type.</p>
+          <label class="field-label" for="connect-url">server URL</label>
+          <input type="url" id="connect-url" placeholder="https://example.com/mcp"
+                 spellcheck="false" autocomplete="off">
+          <label class="field-label" for="connect-token">bearer token (optional)</label>
+          <input type="password" id="connect-token" placeholder="never stored, never uploaded"
+                 autocomplete="off">
+          <button type="button" class="btn-ghost btn-connect" id="connect-btn" disabled>
+            ⇄ CONNECT &amp; FETCH
+          </button>
+          <span class="connect-status" id="connect-status" role="status" aria-live="polite"></span>
+        </div>
+      </details>
+
       <div class="error-banner" id="error-banner" role="alert" hidden>
         <strong>CANNOT SCAN</strong>
         <span id="error-text"></span>
@@ -97,5 +116,6 @@ A bare array, a {"tools": […]} object, or a full JSON-RPC response all work.'>
 
 <script src="examples.js"></script>
 <script src="app.js"></script>
+<script src="connect.js"></script>
 </body>
 </html>
