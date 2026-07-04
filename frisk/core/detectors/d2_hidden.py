@@ -67,7 +67,9 @@ class HiddenContent:
 
     @staticmethod
     def _is_emoji_joiner(text: str, m: re.Match[str]) -> bool:
-        if set(m.group()) != {"\u200d"}:
+        # Exactly ONE ZWJ between pictographs is the emoji joiner; a run of ZWJs is a
+        # covert channel, not an emoji sequence.
+        if m.group() != "\u200d":
             return False
         start, end = m.span()
         return (

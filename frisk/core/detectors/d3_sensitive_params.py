@@ -26,7 +26,7 @@ _NAME_RULES: list[tuple[str, re.Pattern[str]]] = [
         "conversation-history",
         re.compile(
             r"(?:full_?|entire_?)?conversation(?:_?history)?"
-            r"|chat_?(?:history|log)|messages|message_?history|dialog(?:ue)?_?history|history",
+            r"|chat_?(?:history|log)|message_?history|dialog(?:ue)?_?history",
             _I,
         ),
     ),

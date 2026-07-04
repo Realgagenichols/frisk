@@ -21,11 +21,14 @@ _RULES = [
         # verb + code-noun alone is NOT enough — "executes the provided Python code in a
         # sandbox" is a legitimate server class. The rule additionally requires a remote /
         # unpinned coupling (URL, "at call time", "latest").
+        # Requires BOTH a run/fetch verb + code noun AND a remote/unpinned source coupling.
+        # "Returns the latest version of an npm package" has no exec verb → clean.
         pattern=re.compile(
             r"\b(?:runs?|executes?|fetch(?:es)?|downloads?|loads?|installs?|pulls?)\b"
             r"[^.\n]{0,80}?\b(?:script|code|binary|package|plugin|executable)\b"
-            r"[^.\n]{0,60}?(?:https?://|\bat\s+call\s+time\b|\bremote\b|\blatest\b)"
-            r"|\b(?:latest|newest)\b[^.\n]{0,40}?"
+            r"[^.\n]{0,60}?(?:https?://|\bat\s+call\s+time\b|\bremote\b|\blatest\b|\bnewest\b)"
+            r"|\b(?:runs?|executes?|fetch(?:es)?|downloads?|loads?|installs?|pulls?)\b"
+            r"[^.\n]{0,40}?\b(?:latest|newest)\b[^.\n]{0,40}?"
             r"\b(?:script|code|binary|package|plugin|executable)\b"
             r"|\b(?:latest|newest)\b[^.\n]{0,40}?\bfrom\s+https?://",
             _I,

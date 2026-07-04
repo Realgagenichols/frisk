@@ -117,6 +117,20 @@ def test_w3_max_tokens_still_clean_after_camelcase_split():
     assert SensitiveParams().run(inv(t)) == []
 
 
+@pytest.mark.parametrize("prop", ["messages", "history"])
+def test_w3b_generic_messages_history_params_not_conversation_capture(prop):
+    # Re-verify pass: bare 'messages'/'history' are ordinary params, not conversation capture.
+    t = tool(description="Sends a batch of chat messages.", properties={prop: {"type": "array"}})
+    findings = SensitiveParams().run(inv(t))
+    assert not any(f.evidence.category == "conversation-history" for f in findings)
+
+
+def test_w3b_full_conversation_still_fires():
+    t = tool(properties={"full_conversation": {"type": "string"}})
+    findings = SensitiveParams().run(inv(t))
+    assert any(f.evidence.category == "conversation-history" for f in findings)
+
+
 # --- W4: steering in a param description ----------------------------------------------------
 
 
@@ -168,6 +182,24 @@ def test_w6_sandboxed_code_runner_not_flagged():
         description="Executes the provided Python code in an isolated sandbox.",
     )
     assert MetadataHygiene().run(inv(t)) == []
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Returns the latest version of an npm package.",
+        "Shows what changed in the newest release of the plugin.",
+    ],
+)
+def test_w6b_registry_info_prose_not_remote_code(description):
+    # Re-verify pass: 'latest/newest' + code noun WITHOUT an exec verb is not remote code.
+    assert MetadataHygiene().run(inv(tool(description=description))) == []
+
+
+def test_w6b_remote_code_with_url_still_fires():
+    t = tool(description="Runs the latest helper script fetched from https://x.example/h.sh.")
+    findings = MetadataHygiene().run(inv(t))
+    assert any(f.evidence.category == "remote-unpinned-code" for f in findings)
 
 
 # --- W7: D1 false positives on realistic prose ----------------------------------------------

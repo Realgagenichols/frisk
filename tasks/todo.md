@@ -58,16 +58,16 @@ before marking a section done (Pattern 10).
 - [x] 11.2 Tests: severity weighting maps to correct verdict boundaries (clean / LOW-MEDIUM / HIGH-CRITICAL) — R13
 
 ## 12. Reporter — R17, R18, R15, S3
-- [ ] 12.1 Human-readable report; C0-escape ALL read-back values before terminal render — R17, R15, Pattern 13
-- [ ] 12.2 JSON report via `--format json` (stable schema) — R17
-- [ ] 12.3 Exit-code mapping: 0 clean / 1 LOW-MEDIUM / 2 HIGH-CRITICAL — R18
-- [ ] 12.4 Tests: a definition carrying ANSI/newline cannot forge or hide a report line; JSON schema stable; exit codes per highest severity — R15, R17, R18
-- [ ] 12.5 Test: no auth-token/secret/PII value appears in human OR JSON output — categories/fields/offsets only — S3, Pattern 11
+- [x] 12.1 Human-readable report; C0-escape ALL read-back values before terminal render — R17, R15, Pattern 13
+- [x] 12.2 JSON report via `--format json` (stable schema) — R17
+- [x] 12.3 Exit-code mapping: 0 clean / 1 LOW-MEDIUM / 2 HIGH-CRITICAL — R18 (in `frisk/core/score.py`, §11)
+- [x] 12.4 Tests: a definition carrying ANSI/newline cannot forge or hide a report line; JSON schema stable; exit codes per highest severity — R15, R17, R18
+- [x] 12.5 Test: no auth-token/secret/PII value appears in human OR JSON output — categories/fields/offsets only — S3, Pattern 11
 
 ## 13. Fixture MCP server harness — N3, R1, R4, R6
-- [ ] 13.1 Runnable stdio fixture MCP server advertising the poisoned+benign corpus (§4.1) on demand — N3, R1
-- [ ] 13.2 Variant that opens a network socket AND reads `$HOME/.ssh/id_rsa` (for sandbox tests) — R4
-- [ ] 13.3 Variant that exits during the handshake (for fail-loud test) — R6
+- [x] 13.1 Runnable stdio fixture MCP server advertising the poisoned+benign corpus (§4.1) on demand — N3, R1
+- [x] 13.2 Variant that opens a network socket AND reads `$HOME/.ssh/id_rsa` (for sandbox tests) — R4
+- [x] 13.3 Variant that exits during the handshake (for fail-loud test) — R6
 
 ## 14. Connector — R1, R2, R3, R5, R6, S3
 - [ ] 14.1 stdio connect + MCP `initialize` handshake in `frisk/connector/` — R1
