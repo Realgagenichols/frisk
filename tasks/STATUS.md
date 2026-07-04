@@ -12,3 +12,8 @@ running the same detector core; paste-JSON + best-effort CORS direct-connect; ze
 M2 note: the detector core (`frisk/core/`) is already pure/stdlib-only/Pyodide-safe by design
 (N1/R23). The reporter (`frisk/core/report.py`) is in core too, so the playground reuses it.
 The connector/sandbox/CLI are CLI-only and out of the browser's reach.
+
+**De-risk done (2026-07-04):** verified `frisk.core.{models,detectors,engine,score,report}`
+import and run the full pipeline (detectors fire, verdict/JSON/human render) with `mcp`,
+`anyio`, `pydantic`, and the HTTP stack ALL blocked — zero browser-unavailable deps leak in.
+R23's "same code under Pyodide" assumption holds. M2 can proceed straight to Pyodide bundling.
