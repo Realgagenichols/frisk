@@ -27,5 +27,8 @@
 - **One live server validates one dialect, not the wire format.** connect.js's SSE parser
   passed against FastMCP (LF framing) but would break on sse-starlette's CRLF. Where a spec
   says "CRLF or LF", test both framings — grep the spec for optional/either constructs.
+- **A capability probe must validate its own setup step, not just the end-to-end effect.**
+  `_probe_atime` checked "atime advanced after read" but never checked the pin-to-zero took;
+  on utime-ignoring mounts setup failure masqueraded as capability success (§1 review).
 - **Invisible chars in source must be `\uXXXX` escapes** — corpus, detector regexes, and
   tests alike; literal ZWJ/bidi in source breaks reviewability AND exact-match editing.

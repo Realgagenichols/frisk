@@ -1,5 +1,6 @@
 """Behavioral honeypot tests (R24): decoy seeding, access/tamper inspection, canary exfil."""
 
+from frisk.sandbox import honeypot
 from frisk.sandbox.honeypot import DECOY_RELPATHS, seed_decoys
 
 # --- seeding (task 1.1–1.3) ------------------------------------------------------------------
@@ -53,3 +54,20 @@ def test_atime_capability_probe(tmp_path):
     assert isinstance(decoys.atime_reliable, bool)
     leftover = [p for p in tmp_path.rglob("*") if "probe" in p.name.lower()]
     assert leftover == []
+
+
+def test_atime_probe_false_when_utime_fails(tmp_path, monkeypatch):
+    """A probe that cannot pin atime must report unreliable, never capable (fail loud)."""
+
+    def broken_utime(*args, **kwargs):
+        raise OSError("utime not supported")
+
+    monkeypatch.setattr(honeypot.os, "utime", broken_utime)
+    assert honeypot._probe_atime(tmp_path) is False
+
+
+def test_atime_probe_false_when_pin_does_not_take(tmp_path, monkeypatch):
+    """utime succeeding but not actually zeroing atime (coarse-atime mounts) must also
+    report unreliable — setup failure must not masquerade as capability success."""
+    monkeypatch.setattr(honeypot.os, "utime", lambda *a, **k: None)
+    assert honeypot._probe_atime(tmp_path) is False

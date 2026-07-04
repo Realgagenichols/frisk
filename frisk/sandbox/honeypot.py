@@ -109,6 +109,10 @@ def _probe_atime(fake_home: Path) -> bool:
     try:
         probe.write_text("probe", encoding="utf-8")
         os.utime(probe, ns=(0, probe.stat().st_mtime_ns))
+        if probe.stat().st_atime_ns != 0:
+            # The pin itself didn't take (e.g. coarse-atime or utime-ignoring mounts) — the
+            # decoy baselines are equally unpinned, so access detection cannot be trusted.
+            return False
         probe.read_bytes()
         return probe.stat().st_atime_ns > 0
     except OSError:
