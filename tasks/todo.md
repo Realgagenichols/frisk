@@ -92,10 +92,37 @@ before marking a section done (Pattern 10).
 - [x] 17.3 Acceptance tests drive the INSTALLED binary via `sys.prefix` (not `-m`): scan poisoned → findings + exit 2; benign twin → exit 0; verify catches a mutation — R17, R18, Pattern 9
 
 ## 18. Integration & polish
-- [ ] 18.1 End-to-end: sandboxed scan of poisoned fixture (findings + exit 2) and benign twin (clean), then `frisk verify` catches a mutated definition — acceptance criteria
-- [ ] 18.2 Coverage audit: every R/S/N requirement has ≥1 test; every detector D1–D7 has a benign twin — N2
-- [ ] 18.3 `README.md` with usage examples (`frisk scan ./server`, `--format json`, `frisk verify`) — N3
-- [ ] 18.4 `uv run ruff check .` clean, run unpiped (Pattern 10) — N3
+- [x] 18.1 End-to-end: sandboxed scan of poisoned fixture (findings + exit 2) and benign twin (clean), then `frisk verify` catches a mutated definition — `tests/test_integration.py` (in-process) + `tests/test_cli_acceptance.py` (binary)
+- [x] 18.2 Coverage audit: every R/S/N requirement has ≥1 test; every detector D1–D7 has a benign twin — N2
+- [x] 18.3 `README.md` with usage examples (`frisk scan ./server`, `--format json`, `frisk verify`) — N3
+- [x] 18.4 `uv run ruff check .` clean, run unpiped (Pattern 10) — N3
 
 ## Review
-<!-- Results added after each section during /implement -->
+
+**M1 complete.** 149 tests pass, ruff clean. All M1 requirements (R1–R18, S3, N1–N4)
+implemented and tested. Batched detector review (§4–§10) found W1–W7 + 2 re-verify FPs,
+all fixed with a 26-test regression suite. Section reviews passed for §2 (models) and §3
+(engine). Requirement→test coverage audit below.
+
+| Req | Where tested |
+|-----|--------------|
+| R1 handshake | test_connector, test_cli_acceptance |
+| R2 enumerate 3 tools/1 prompt → 4 items | test_connector::counts |
+| R3 remote URL + token safety | test_connector::remote_* |
+| R4 sandbox network/fake-HOME/rlimit/timeout | test_sandbox (seatbelt, macOS) |
+| R4a --no-sandbox + warned fallback | test_sandbox::disabled/fallback |
+| R5 inventory fields + raw bytes | test_models, test_connector |
+| R6 fail-loud, never "clean" | test_connector, test_cli_acceptance::unreachable |
+| R7–R11 D1–D5 + benign twins | test_d1..d5, test_review_regressions |
+| R12 finding shape / suppression / error→finding | test_engine |
+| R13 score + verdict | test_score |
+| R14 lockfile + verify diff | test_lockfile, test_cli_acceptance, test_integration |
+| R15 C0-escape + "\n" framing | test_report, test_lockfile, test_engine |
+| R16 D7 + benign twin | test_d7 |
+| R17 human/JSON report | test_report, test_cli_acceptance |
+| R18 exit codes 0/1/2 | test_score, test_cli_acceptance |
+| S3 no secret/token/PII values | test_report, test_engine, test_connector, test_sandbox |
+| N1 deterministic, no net/LLM | test_integration::deterministic (core is stdlib-only) |
+| N2 benign twin per detector | every test_dN + test_review_regressions::benign_corpus |
+| N3 uv/ruff/pytest + fixture harness | pyproject, test_fixture_server |
+| N4 MIT | LICENSE |
