@@ -87,9 +87,9 @@ before marking a section done (Pattern 10).
 - [x] 16.3 Tests: mutated tool description → reported mutated + non-zero (R14); a def containing U+2028/2029/0085 hashes and diffs stably (Pattern 13) — R14, R15
 
 ## 17. CLI wiring — R17, R18, S3
-- [ ] 17.1 `frisk scan <target>` — stdio/URL detection, flags: `--format`, `--no-sandbox`, `--lock`, auth-token/env — R17, R4a
-- [ ] 17.2 `frisk verify <target>` wiring — R14
-- [ ] 17.3 Acceptance tests drive the INSTALLED binary via `sys.prefix` (not `-m`): scan poisoned → findings + exit 2; benign twin → exit 0; verify catches a mutation — R17, R18, Pattern 9
+- [x] 17.1 `frisk scan <target>` — stdio/URL detection, flags: `--format`, `--no-sandbox`, `--lock`, auth-token/env — R17, R4a
+- [x] 17.2 `frisk verify <target>` wiring — R14
+- [x] 17.3 Acceptance tests drive the INSTALLED binary via `sys.prefix` (not `-m`): scan poisoned → findings + exit 2; benign twin → exit 0; verify catches a mutation — R17, R18, Pattern 9
 
 ## 18. Integration & polish
 - [ ] 18.1 End-to-end: sandboxed scan of poisoned fixture (findings + exit 2) and benign twin (clean), then `frisk verify` catches a mutated definition — acceptance criteria
