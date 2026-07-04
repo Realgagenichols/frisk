@@ -31,8 +31,8 @@
 - [x] 4.4 CORS/network failure → specific error naming the failure + guidance to fall back to paste mode; never renders a clean report from a failed fetch (R6 spirit) — R22
 
 ## 5. Deploy
-- [ ] 5.1 `.github/workflows/pages.yml`: on push to `main` — checkout, `python scripts/build_site.py`, upload `site/` artifact, deploy to GitHub Pages (note: enabling Pages "GitHub Actions" source in repo settings is a manual step for Gage) — R20
-- [ ] 5.2 README: Playground section — URL, paste-mode usage, direct-connect caveats (CORS), privacy note — R20, R22
+- [x] 5.1 `.github/workflows/pages.yml`: on push to `main` — checkout, `python scripts/build_site.py`, upload `site/` artifact, deploy to GitHub Pages (note: enabling Pages "GitHub Actions" source in repo settings is a manual step for Gage) — R20
+- [x] 5.2 README: Playground section — URL, paste-mode usage, direct-connect caveats (CORS), privacy note — R20, R22
 
 ## 6. Integration & polish
 - [ ] 6.1 Local browser verification (`python -m http.server -d site`): poisoned example → findings + verdict match `frisk scan` on the equivalent fixture; benign example → clean. Record results in Review — R20, R21, R23

@@ -49,6 +49,28 @@ frisk verify npx -y @acme/weather-mcp
 | `1`  | warnings — LOW/MEDIUM findings |
 | `2`  | HIGH/CRITICAL findings, drift on `verify`, or an operational error |
 
+## Playground (browser, nothing uploaded)
+
+Try the detectors without installing anything:
+**<https://realgagenichols.github.io/frisk/>**
+
+Paste the JSON result of an MCP `tools/list` call (a bare array, a `{"tools": […]}` object,
+or a full JSON-RPC response) and hit **SCAN**. The page runs the *identical* detector core
+as the CLI — the same Python package, executed in your browser via
+[Pyodide](https://pyodide.org) — so the verdict matches `frisk scan`.
+
+- **Privacy:** the site is static. No backend, no analytics, no storage; your definitions
+  and any auth token never leave the browser. The only network request is the pinned
+  Pyodide CDN.
+- **Direct connect (best-effort):** for remote streamable-HTTP servers that send CORS
+  headers, the page can fetch `tools/resources/prompts` itself (browser → server, optional
+  bearer token kept in memory only). Most servers don't allow cross-origin requests —
+  paste mode is the reliable path.
+- The playground scans *pasted/fetched definitions only*. Sandboxed live enumeration of
+  stdio servers, lockfiles, and `frisk verify` need the CLI.
+
+To run it locally: `python scripts/build_site.py && python -m http.server -d site`.
+
 ## Detectors
 
 | id | detects |
@@ -62,7 +84,7 @@ frisk verify npx -y @acme/weather-mcp
 | D7 | metadata hygiene (remote/unpinned code sourcing, missing/unpinned server identity) |
 
 Detectors are pure, deterministic, network-free, and LLM-free — the single source of truth
-shared by the CLI and (in M2) a browser playground running the same code under Pyodide.
+shared by the CLI and the browser playground, which runs the same code under Pyodide.
 
 ## Sandbox (macOS)
 
