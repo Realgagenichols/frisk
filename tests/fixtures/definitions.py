@@ -11,9 +11,9 @@ resistance.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
+from frisk.core import ingest
 from frisk.core.models import Item, ItemKind
 
 # --- D1: instruction injection ------------------------------------------------------------
@@ -233,12 +233,15 @@ BENIGN_TOOLS = [
 
 
 def as_item(tool: dict[str, Any], kind: ItemKind = ItemKind.TOOL) -> Item:
-    """Build a normalized Item from a corpus dict, as the connector would (R5)."""
-    raw = json.dumps(tool, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    """Build a normalized Item from a corpus dict, as the connector would (R5).
+
+    Delegates canonicalization to the single source of truth so this fixture can never
+    drift from the production recipe (R23).
+    """
     return Item(
         kind=kind,
         name=tool["name"],
         description=tool.get("description"),
         input_schema=tool.get("inputSchema"),
-        raw_bytes=raw,
+        raw_bytes=ingest.canonical_bytes(tool),
     )

@@ -4,6 +4,13 @@ Single source of truth for normalization and canonical bytes: the CLI connector 
 here after ``model_dump``-ing the SDK models, and the playground's paste mode calls
 ``inventory_from_json`` directly. Keeping both paths on one implementation is what makes
 paste-mode findings and lockfile hashes byte-identical to the CLI's.
+
+Known limitation (deliberate): paste mode canonicalizes the pasted dicts verbatim, while the
+connector canonicalizes the SDK's ``model_dump`` — which renames ``_meta``→``meta``,
+normalizes resource URLs (trailing slash), and drops explicit ``null`` keys. For servers
+using those shapes, a paste-mode hash can differ from a CLI ``frisk.lock`` hash even though
+findings are identical (scanned string leaves are unchanged). Fixing this would change
+existing lockfile hashes, so it stays documented rather than papered over.
 """
 
 from __future__ import annotations
@@ -16,7 +23,8 @@ from frisk.core.models import Inventory, Item, ItemKind
 
 class IngestError(Exception):
     """Malformed pasted/fetched definition JSON. The message names the exact problem and is
-    safe to display: it never echoes input values (Pattern 11), only shapes and key names."""
+    safe to display: only shapes, key names, and repr-escaped item names — never free-form
+    input values or secrets (Pattern 11, S3)."""
 
 
 def canonical_bytes(payload: dict[str, Any]) -> bytes:
