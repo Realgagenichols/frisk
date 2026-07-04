@@ -70,11 +70,11 @@ before marking a section done (Pattern 10).
 - [x] 13.3 Variant that exits during the handshake (for fail-loud test) — R6
 
 ## 14. Connector — R1, R2, R3, R5, R6, S3
-- [ ] 14.1 stdio connect + MCP `initialize` handshake in `frisk/connector/` — R1
-- [ ] 14.2 Enumerate tools/resources/prompts via list methods; normalize to `Inventory` capturing raw advertised bytes exactly — R2, R5
-- [ ] 14.3 Remote URL target (SSE / streamable-HTTP) + optional auth token via env or flag; token never logged/written — R3, S3
-- [ ] 14.4 Fail-loud: any connect/enumeration failure → specific actionable error + non-zero exit, never "clean"; do NOT interpolate raw target bytes/exception reprs — R6, Patterns 6 & 11
-- [ ] 14.5 Tests: handshake + enumerate 3 tools/1 prompt → 4-item Inventory (R2); remote bearer token absent from all output (R3/S3); handshake-exit → non-zero + cause, not "0 findings" (R6) — R1,R2,R3,R5,R6
+- [x] 14.1 stdio connect + MCP `initialize` handshake in `frisk/connector/` — R1
+- [x] 14.2 Enumerate tools/resources/prompts via list methods; normalize to `Inventory` capturing raw advertised bytes exactly — R2, R5
+- [x] 14.3 Remote URL target (SSE / streamable-HTTP) + optional auth token via env or flag; token never logged/written — R3, S3
+- [x] 14.4 Fail-loud: any connect/enumeration failure → specific actionable error + non-zero exit, never "clean"; do NOT interpolate raw target bytes/exception reprs — R6, Patterns 6 & 11
+- [x] 14.5 Tests: handshake + enumerate 3 tools/1 prompt → 4-item Inventory (R2); remote bearer token absent from all output (R3/S3); handshake-exit → non-zero + cause, not "0 findings" (R6) — R1,R2,R3,R5,R6
 
 ## 15. Sandbox — R4, R4a
 - [ ] 15.1 Seatbelt profile (deny network, confine FS) + throwaway fake `$HOME` + scrubbed env + CPU/mem rlimits + hard wall-clock timeout — R4
