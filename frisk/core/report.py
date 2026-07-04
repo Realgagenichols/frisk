@@ -25,6 +25,9 @@ _DETECTOR_LABELS = {
     "D5": "shadowing",
     "D6": "rug-pull",
     "D7": "metadata-hygiene",
+    # D8 findings are produced by the CLI-side honeypot (frisk.sandbox.honeypot), not by an
+    # Inventory detector — the label lives here so both renderers name it consistently.
+    "D8": "honeypot",
 }
 
 

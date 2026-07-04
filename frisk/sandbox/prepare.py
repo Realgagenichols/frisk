@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from frisk.connector.target import StdioTarget
+from frisk.sandbox.honeypot import DecoySet, seed_decoys
 
 # Benign ambient variables the untrusted child may keep; everything else is dropped so
 # frisk's own secrets (AWS_*, OPENAI_API_KEY, …) never reach the target (S3).
@@ -48,6 +49,8 @@ class SandboxResult:
     fake_home: Path
     mode: str  # "seatbelt" | "fallback" | "disabled"
     warning: str | None = None
+    # Honeypot decoys seeded in the fake HOME (R24); every prepared target carries them.
+    decoys: DecoySet | None = None
     _cleanup: list[Path] = field(default_factory=list, repr=False)
 
 
@@ -133,7 +136,6 @@ def _make_fake_home(explicit: Path | None) -> tuple[Path, list[Path]]:
         home = Path(tempfile.mkdtemp(prefix="frisk-home-"))
         cleanup.append(home)
     (home / "tmp").mkdir(parents=True, exist_ok=True)
-    (home / ".ssh").mkdir(exist_ok=True)  # empty decoy dir (M3 seeds real decoys)
     return home, cleanup
 
 
@@ -148,6 +150,8 @@ def prepare_stdio(
 
     ambient = dict(os.environ) if ambient is None else ambient
     fake_home, cleanup = _make_fake_home(options.fake_home)
+    # Seed honeypot decoys in every mode (R24) — the fake HOME exists even without seatbelt.
+    decoys = seed_decoys(fake_home)
     scrubbed = scrub_env(target.env, fake_home, ambient)
     real_home = Path(ambient.get("HOME", str(Path.home())))
 
@@ -186,6 +190,7 @@ def prepare_stdio(
         fake_home=fake_home,
         mode=mode,
         warning=warning,
+        decoys=decoys,
         _cleanup=cleanup,
     )
 

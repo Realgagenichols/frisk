@@ -57,20 +57,20 @@ exists.
       (N2, false-positive twin) — R24, N2
 
 ## 4. Sandbox + CLI integration
-- [ ] 4.1 `prepare_stdio` calls `seed_decoys` for every mode (seatbelt/fallback/disabled);
+- [x] 4.1 `prepare_stdio` calls `seed_decoys` for every mode (seatbelt/fallback/disabled);
       `SandboxResult` gains `decoys: DecoySet`; drop the now-obsolete bare
       `.ssh` mkdir + M3 comment in `_make_fake_home` — R24
-- [ ] 4.2 CLI `_enumerate` restructure (`frisk/cli.py`): after enumeration and BEFORE
+- [x] 4.2 CLI `_enumerate` restructure (`frisk/cli.py`): after enumeration and BEFORE
       `_cleanup` rmtree, run `inspect_decoys` + `scan_for_canary`; return
       `(inventory, honeypot_findings)`; print the atime-degraded warning to stderr when
       `not decoys.atime_reliable` (no silent downgrade); remote targets return `[]` — R24
-- [ ] 4.3 `_cmd_scan`: merge honeypot findings with detector findings before `assess()` —
+- [x] 4.3 `_cmd_scan`: merge honeypot findings with detector findings before `assess()` —
       they flow into score, verdict, human/JSON report, and exit code with no reporter
       changes (verify rendering of `honeypot:` item refs reads sensibly, adjust only if
       broken) — R24, R13, R17, R18
-- [ ] 4.4 `_cmd_verify`: honeypot findings printed to stderr and force exit 2 even when the
+- [x] 4.4 `_cmd_verify`: honeypot findings printed to stderr and force exit 2 even when the
       lock diff is clean — a verify run that catches credential theft must not exit 0 — R24, R18
-- [ ] 4.5 Unit tests: sandbox result carries decoys in all three modes; scan of a
+- [x] 4.5 Unit tests: sandbox result carries decoys in all three modes; scan of a
       poisoned-inventory + honeypot-clean run produces identical output to M2 behavior
       (regression: honeypot integration changes nothing when decoys untouched); update
       `test_seatbelt_reads_decoy_home_not_real_key` — probe now READS decoy content

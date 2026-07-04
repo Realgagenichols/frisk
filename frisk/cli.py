@@ -9,11 +9,11 @@ import sys
 from frisk.connector import ConnectorError, RemoteTarget, StdioTarget, Target, enumerate_target
 from frisk.core.detectors import ALL_DETECTORS
 from frisk.core.engine import run_detectors
-from frisk.core.models import Inventory
+from frisk.core.models import Finding, Inventory, Severity
 from frisk.core.report import render_human, render_json
 from frisk.core.score import Assessment, assess, exit_code
 from frisk.lockfile import LockError, diff_lock, read_lock, render_diff, write_lock
-from frisk.sandbox import SandboxOptions, prepare_stdio
+from frisk.sandbox import SandboxOptions, inspect_decoys, prepare_stdio, scan_for_canary
 
 DEFAULT_LOCK = "frisk.lock"
 DEFAULT_AUTH_ENV = "FRISK_AUTH_TOKEN"
@@ -73,19 +73,34 @@ def _build_target(args: argparse.Namespace) -> Target:
     return StdioTarget(command=target, args=stdio_args, env={}, cwd=os.getcwd())
 
 
-def _enumerate(args: argparse.Namespace) -> Inventory:
-    """Sandbox (for stdio) then enumerate. Raises ConnectorError on any failure (R6)."""
+def _enumerate(args: argparse.Namespace) -> tuple[Inventory, list[Finding]]:
+    """Sandbox (for stdio) then enumerate; returns the Inventory plus honeypot findings
+    (R24). Raises ConnectorError on any failure (R6). Remote targets have no sandbox and
+    therefore no honeypot — their findings list is always empty."""
     target = _build_target(args)
     if isinstance(target, StdioTarget):
         options = SandboxOptions(enabled=not args.no_sandbox, timeout_seconds=args.timeout)
         sandboxed = prepare_stdio(target, options)
         if sandboxed.warning:
             print(f"warning: {sandboxed.warning}", file=sys.stderr)
+        if sandboxed.decoys is not None and not sandboxed.decoys.atime_reliable:
+            # Degraded, not disabled: tamper + canary-exfiltration detection still work.
+            print(
+                "warning: filesystem does not update atime on read — honeypot decoy-read "
+                "detection is degraded (tamper and exfiltration detection still active)",
+                file=sys.stderr,
+            )
         try:
-            return enumerate_target(sandboxed.target, timeout=sandboxed.timeout_seconds)
+            inventory = enumerate_target(sandboxed.target, timeout=sandboxed.timeout_seconds)
+            # Inspect decoys BEFORE the fake HOME is cleaned up, and only after the child
+            # has exited (enumerate_target returns with the transport closed).
+            honeypot_findings = inspect_decoys(sandboxed.decoys) + scan_for_canary(
+                inventory, sandboxed.decoys
+            )
+            return inventory, honeypot_findings
         finally:
             _cleanup(sandboxed)
-    return enumerate_target(target, timeout=args.timeout)
+    return enumerate_target(target, timeout=args.timeout), []
 
 
 def _cleanup(sandboxed) -> None:
@@ -96,8 +111,8 @@ def _cleanup(sandboxed) -> None:
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
-    inventory = _enumerate(args)
-    findings = run_detectors(inventory, ALL_DETECTORS)
+    inventory, honeypot_findings = _enumerate(args)
+    findings = run_detectors(inventory, ALL_DETECTORS) + honeypot_findings
     assessment: Assessment = assess(findings)
     if args.format == "json":
         sys.stdout.write(render_json(inventory, findings, assessment))
@@ -118,9 +133,16 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
 def _cmd_verify(args: argparse.Namespace) -> int:
     locked = read_lock(args.lock)
-    inventory = _enumerate(args)
+    inventory, honeypot_findings = _enumerate(args)
     diff = diff_lock(locked, inventory)
     sys.stdout.write(render_diff(diff))
+    # A verify run that catches the server stealing decoy credentials must not exit 0,
+    # even when the definitions themselves have not drifted (R24, R18). INFO-level
+    # honeypot notes (e.g. an inspection error) are reported but do not gate.
+    for f in honeypot_findings:
+        print(f"honeypot: [{f.severity.name}] {f.item_ref} — {f.message}", file=sys.stderr)
+    if any(f.severity >= Severity.HIGH for f in honeypot_findings):
+        return EXIT_OPERATIONAL_ERROR
     return EXIT_OPERATIONAL_ERROR if diff.changed else 0
 
 

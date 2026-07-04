@@ -15,6 +15,12 @@ back to the non-seatbelt layers with a printed warning — never a silent downgr
 
 from __future__ import annotations
 
+from frisk.sandbox.honeypot import (
+    DecoySet,
+    inspect_decoys,
+    scan_for_canary,
+    seed_decoys,
+)
 from frisk.sandbox.prepare import (
     SandboxOptions,
     SandboxResult,
@@ -24,9 +30,13 @@ from frisk.sandbox.prepare import (
 )
 
 __all__ = [
+    "DecoySet",
     "SandboxOptions",
     "SandboxResult",
+    "inspect_decoys",
     "prepare_stdio",
+    "scan_for_canary",
     "scrub_env",
     "seatbelt_available",
+    "seed_decoys",
 ]

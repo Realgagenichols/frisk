@@ -116,6 +116,38 @@ def test_prepare_forces_fake_home_in_env(tmp_path):
     assert result.target.env["HOME"] == str(tmp_path / "home")
 
 
+# --- honeypot decoys are seeded in every mode (R24) ------------------------------------------
+
+
+def _assert_decoys_seeded(result, fake_home: Path):
+    assert result.decoys is not None
+    assert result.decoys.home == fake_home
+    key = fake_home / ".ssh" / "id_rsa"
+    assert key.is_file()
+    assert result.decoys.canary in key.read_text(encoding="utf-8")
+
+
+def test_decoys_seeded_in_default_mode(tmp_path):
+    target = _probe_target(tmp_path / "r.json", tmp_path / "home")
+    result = prepare_stdio(target, SandboxOptions(fake_home=tmp_path / "home"))
+    _assert_decoys_seeded(result, tmp_path / "home")
+
+
+def test_decoys_seeded_in_disabled_mode(tmp_path):
+    target = _probe_target(tmp_path / "r.json", tmp_path / "home")
+    result = prepare_stdio(target, SandboxOptions(enabled=False, fake_home=tmp_path / "home"))
+    assert result.mode == "disabled"
+    _assert_decoys_seeded(result, tmp_path / "home")
+
+
+def test_decoys_seeded_in_fallback_mode(tmp_path, monkeypatch):
+    monkeypatch.setattr("frisk.sandbox.prepare.seatbelt_available", lambda: False)
+    target = _probe_target(tmp_path / "r.json", tmp_path / "home")
+    result = prepare_stdio(target, SandboxOptions(enabled=True, fake_home=tmp_path / "home"))
+    assert result.mode == "fallback"
+    _assert_decoys_seeded(result, tmp_path / "home")
+
+
 # --- seatbelt behavior (macOS only) ---------------------------------------------------------
 
 
@@ -158,7 +190,9 @@ def test_seatbelt_reads_decoy_home_not_real_key(tmp_path):
     enumerate_target(sb.target, timeout=sb.timeout_seconds)
     outcome = json.loads(result_file.read_text())
     assert outcome["home"] == str(fake_home)  # decoy HOME, not the real one
-    assert outcome["ssh_key_contents"].startswith("unreadable")  # real key never read
+    # M3: the probe reads the seeded DECOY key — canary material, never the user's real key.
+    assert sb.decoys.canary in outcome["ssh_key_contents"]
+    assert "PRIVATE KEY" in outcome["ssh_key_contents"]  # realistic-shaped decoy
 
 
 @requires_seatbelt
