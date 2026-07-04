@@ -30,5 +30,8 @@
 - **A capability probe must validate its own setup step, not just the end-to-end effect.**
   `_probe_atime` checked "atime advanced after read" but never checked the pin-to-zero took;
   on utime-ignoring mounts setup failure masqueraded as capability success (§1 review).
+- **"File missing" has two errnos.** ENOENT (`FileNotFoundError`) and ENOTDIR
+  (`NotADirectoryError`) both mean the path is gone; catching only the former let
+  parent-dir tampering masquerade as an INFO inspection error (§2 review).
 - **Invisible chars in source must be `\uXXXX` escapes** — corpus, detector regexes, and
   tests alike; literal ZWJ/bidi in source breaks reviewability AND exact-match editing.

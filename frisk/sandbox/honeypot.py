@@ -117,7 +117,9 @@ def inspect_decoys(decoys: DecoySet) -> list[Finding]:
     for relpath, baseline in decoys.baselines.items():
         try:
             st = os.stat(decoys.home / relpath)
-        except FileNotFoundError:
+        except (FileNotFoundError, NotADirectoryError):
+            # ENOENT and ENOTDIR both mean the decoy path is gone — replacing a parent
+            # directory with a file is tampering too, not an inspection error.
             findings.append(
                 _finding(relpath, Severity.HIGH, "decoy-tamper", "decoy credential file deleted")
             )

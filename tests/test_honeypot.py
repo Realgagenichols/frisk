@@ -127,6 +127,20 @@ def test_deleting_a_decoy_fires_decoy_tamper(tmp_path):
     ]
 
 
+def test_replacing_a_decoy_parent_dir_fires_decoy_tamper(tmp_path):
+    """ENOTDIR is tampering, not an inspection error: `mv ~/.ssh aside; touch ~/.ssh` makes
+    the decoy path vanish just as thoroughly as deleting the file (§2 review)."""
+    import shutil
+
+    decoys = seed_decoys(tmp_path)
+    shutil.rmtree(tmp_path / ".ssh")
+    (tmp_path / ".ssh").write_text("not a dir", encoding="utf-8")
+    findings = inspect_decoys(decoys)
+    assert [(f.item_ref, f.evidence.category, f.severity) for f in findings] == [
+        ("honeypot:.ssh/id_rsa", "decoy-tamper", Severity.HIGH)
+    ]
+
+
 def test_stat_error_is_a_finding_never_a_silent_pass(tmp_path, monkeypatch):
     """R12: a detector that errors emits a finding — never silently passes."""
     decoys = seed_decoys(tmp_path)
