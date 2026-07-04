@@ -82,9 +82,9 @@ before marking a section done (Pattern 10).
 - [x] 15.3 Tests: network socket attempt fails but scan completes (R4); server reading `~/.ssh/id_rsa` hits the decoy fake-HOME, not the real key (R4); fallback prints the warning (R4a) — R4, R4a
 
 ## 16. Lockfile & verify — R14, R15
-- [ ] 16.1 `frisk scan` writes `frisk.lock` hashing every definition; framing splits on explicit `"\n"`, never `splitlines()` — R14, R15, Pattern 13
-- [ ] 16.2 `frisk verify` re-enumerates, diffs added/removed/mutated, exits non-zero on drift; C0-escape diff output — R14, R15
-- [ ] 16.3 Tests: mutated tool description → reported mutated + non-zero (R14); a def containing U+2028/2029/0085 hashes and diffs stably (Pattern 13) — R14, R15
+- [x] 16.1 `frisk scan` writes `frisk.lock` hashing every definition; framing splits on explicit `"\n"`, never `splitlines()` — R14, R15, Pattern 13
+- [x] 16.2 `frisk verify` re-enumerates, diffs added/removed/mutated, exits non-zero on drift; C0-escape diff output — R14, R15 (diff+render here; CLI exit wiring in §17)
+- [x] 16.3 Tests: mutated tool description → reported mutated + non-zero (R14); a def containing U+2028/2029/0085 hashes and diffs stably (Pattern 13) — R14, R15
 
 ## 17. CLI wiring — R17, R18, S3
 - [ ] 17.1 `frisk scan <target>` — stdio/URL detection, flags: `--format`, `--no-sandbox`, `--lock`, auth-token/env — R17, R4a
