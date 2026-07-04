@@ -77,9 +77,9 @@ before marking a section done (Pattern 10).
 - [x] 14.5 Tests: handshake + enumerate 3 tools/1 prompt → 4-item Inventory (R2); remote bearer token absent from all output (R3/S3); handshake-exit → non-zero + cause, not "0 findings" (R6) — R1,R2,R3,R5,R6
 
 ## 15. Sandbox — R4, R4a
-- [ ] 15.1 Seatbelt profile (deny network, confine FS) + throwaway fake `$HOME` + scrubbed env + CPU/mem rlimits + hard wall-clock timeout — R4
-- [ ] 15.2 `--no-sandbox` opt-out; warned lightweight fallback (scrubbed env + fake HOME + rlimits + timeout, no seatbelt) when seatbelt unavailable — never a silent downgrade — R4a
-- [ ] 15.3 Tests: network socket attempt fails but scan completes (R4); server reading `~/.ssh/id_rsa` hits the decoy fake-HOME, not the real key (R4); fallback prints the warning (R4a) — R4, R4a
+- [x] 15.1 Seatbelt profile (deny network, confine FS) + throwaway fake `$HOME` + scrubbed env + CPU/mem rlimits + hard wall-clock timeout — R4
+- [x] 15.2 `--no-sandbox` opt-out; warned lightweight fallback (scrubbed env + fake HOME + rlimits + timeout, no seatbelt) when seatbelt unavailable — never a silent downgrade — R4a
+- [x] 15.3 Tests: network socket attempt fails but scan completes (R4); server reading `~/.ssh/id_rsa` hits the decoy fake-HOME, not the real key (R4); fallback prints the warning (R4a) — R4, R4a
 
 ## 16. Lockfile & verify — R14, R15
 - [ ] 16.1 `frisk scan` writes `frisk.lock` hashing every definition; framing splits on explicit `"\n"`, never `splitlines()` — R14, R15, Pattern 13

@@ -16,14 +16,15 @@ class ConnectorError(Exception):
     (cross-cutting Pattern 11, S3)."""
 
 
-def enumerate_target(target: Target) -> Inventory:
+def enumerate_target(target: Target, *, timeout: float | None = None) -> Inventory:
     """Synchronously enumerate a target into an Inventory. Fails loudly (R6): on any error it
     raises ConnectorError — it never returns a partial or empty Inventory that a caller might
-    mistake for a clean 'no findings' result."""
+    mistake for a clean 'no findings' result. ``timeout`` is a hard wall-clock bound on the
+    whole handshake+enumeration (the sandbox's outer containment, R4)."""
     import anyio
 
     try:
-        return anyio.run(_enumerate, target)
+        return anyio.run(_enumerate, target, timeout)
     except ConnectorError:
         raise
     except BaseException as exc:  # noqa: BLE001 — boundary: convert to a safe, loud error
@@ -41,7 +42,16 @@ def _root_cause_name(exc: BaseException) -> str:
     return type(exc).__name__
 
 
-async def _enumerate(target: Target) -> Inventory:
+async def _enumerate(target: Target, timeout: float | None = None) -> Inventory:
+    import anyio
+
+    if timeout is not None:
+        with anyio.fail_after(timeout):
+            return await _enumerate_inner(target)
+    return await _enumerate_inner(target)
+
+
+async def _enumerate_inner(target: Target) -> Inventory:
     from mcp import ClientSession
 
     async with _open_transport(target) as (read_stream, write_stream):

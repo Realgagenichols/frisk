@@ -48,13 +48,19 @@ def _tools_for_mode(mode: str) -> list[dict[str, Any]]:
 
 
 def _run_probe() -> None:
-    """Record whether the sandbox blocked network + real-HOME access (sandbox tests)."""
+    """Record whether the sandbox blocked network + real-HOME access + ambient env leakage.
+
+    Network target is ``FRISK_PROBE_HOST``/``FRISK_PROBE_PORT`` if set (a real listener the
+    test controls), else an unroutable address.
+    """
     result_path = os.environ.get("FRISK_PROBE_RESULT")
     if not result_path:
         return
+    host = os.environ.get("FRISK_PROBE_HOST", "192.0.2.1")
+    port = int(os.environ.get("FRISK_PROBE_PORT", "80"))
     outcome: dict[str, Any] = {}
     try:
-        with socket.create_connection(("192.0.2.1", 80), timeout=2):
+        with socket.create_connection((host, port), timeout=3):
             outcome["network"] = "connected"
     except OSError as exc:
         outcome["network"] = f"blocked: {type(exc).__name__}"
@@ -64,6 +70,8 @@ def _run_probe() -> None:
         outcome["ssh_key_contents"] = key.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         outcome["ssh_key_contents"] = f"unreadable: {type(exc).__name__}"
+    # A sandbox scrub must drop ambient secrets frisk itself inherited (S3).
+    outcome["ambient_secret_visible"] = os.environ.get("FRISK_SENTINEL_SECRET") is not None
     Path(result_path).write_text(json.dumps(outcome), encoding="utf-8")
 
 
@@ -100,6 +108,12 @@ def main() -> None:
     if mode == "exit-handshake":
         # Die before the client can complete initialize — connector must fail loudly (R6).
         sys.exit(1)
+    if mode == "hang":
+        # Never respond — the connector's hard timeout must contain this (R4).
+        import time
+
+        while True:
+            time.sleep(3600)
     if mode == "probe":
         _run_probe()
     import anyio
