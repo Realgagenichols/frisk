@@ -19,18 +19,19 @@ from frisk.core.sanitize import make_evidence
 
 _I = re.IGNORECASE
 
-# Matched against the full property name.
+# Full-matched against the property name (after camelCase→snake normalization): anchored so
+# `conversation_id` — ubiquitous on legitimate chat tools — never matches (Pattern 2).
 _NAME_RULES: list[tuple[str, re.Pattern[str]]] = [
     (
         "conversation-history",
         re.compile(
             r"(?:full_?|entire_?)?conversation(?:_?history)?"
-            r"|chat_?(?:history|log)|message_?history|dialog(?:ue)?_?history",
+            r"|chat_?(?:history|log)|messages|message_?history|dialog(?:ue)?_?history|history",
             _I,
         ),
     ),
-    ("environment-capture", re.compile(r"^env$|environment|env_?vars?$", _I)),
-    ("file-content-capture", re.compile(r"file_?contents?|raw_?file", _I)),
+    ("environment-capture", re.compile(r"env|environment(?:_?var(?:iable)?s?)?|env_?vars?", _I)),
+    ("file-content-capture", re.compile(r".*(?:file_?contents?|raw_?file).*", _I)),
 ]
 
 # Credential match works on `_`-split name segments so `max_tokens` stays clean but
@@ -61,6 +62,11 @@ _DESC_RULES: list[tuple[str, re.Pattern[str]]] = [
 _CATCHALL_NAMES = {"context", "metadata", "meta", "extra", "payload", "data"}
 
 
+def _snake(name: str) -> str:
+    """Normalize camelCase to snake_case so `accessToken` matches like `access_token`."""
+    return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name)
+
+
 class SensitiveParams:
     id = "D3"
 
@@ -79,7 +85,10 @@ class SensitiveParams:
         for name, spec in props.items():
             spec = spec if isinstance(spec, dict) else {}
             path = f"inputSchema.properties.{name}"
-            findings.extend(self._scan_name(item, path, name))
+            # Enum/const-bounded values can't capture free-form sensitive data — the same
+            # bounding logic the catch-all rule applies (Pattern 3).
+            if "enum" not in spec and "const" not in spec:
+                findings.extend(self._scan_name(item, path, name))
             description = spec.get("description")
             if isinstance(description, str):
                 findings.extend(self._scan_description(item, f"{path}.description", description))
@@ -97,11 +106,12 @@ class SensitiveParams:
 
     def _scan_name(self, item: Item, path: str, name: str) -> list[Finding]:
         findings = []
+        normalized = _snake(name)
         for category, pattern in _NAME_RULES:
-            if pattern.search(name):
+            if pattern.fullmatch(normalized):
                 message = f'property "{name}" solicits {category}'
                 findings.append(self._finding(item, f"{path}#key", name, category, message))
-        segments = {seg.lower() for seg in name.split("_")}
+        segments = {seg.lower() for seg in normalized.split("_")}
         if segments & _CREDENTIAL_SEGMENTS or "apikey" in name.lower().replace("_", ""):
             findings.append(
                 self._finding(
@@ -135,8 +145,11 @@ class SensitiveParams:
     def _is_generic_catchall(name: str, spec: dict[str, Any]) -> bool:
         if name.lower() not in _CATCHALL_NAMES:
             return False
-        # Bounded values (enum) or non-text types are narrow, legitimate uses.
+        # Bounded values (enum/const) or non-text types are narrow, legitimate uses; so is
+        # an object with declared sub-properties — a structured body, not a catch-all.
         if "enum" in spec or "const" in spec:
+            return False
+        if spec.get("type") == "object" and spec.get("properties"):
             return False
         return spec.get("type") in (None, "string", "object")
 

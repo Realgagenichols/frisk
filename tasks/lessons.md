@@ -7,3 +7,13 @@
 - **Schema keywords are leaf noise.** `_walk` yields JSON Schema structural keys (`type`,
   `properties`, `description`) as `#key` leaves. Detectors matching generic words must not
   anchor on schema-keyword leaves (D3/D4: match property names by position, not any leaf).
+- **Scan everything the model sees, not just the documented fields.** Limiting prose rules
+  to `description` left a trivial relocation bypass via schema `title`/`examples`/`default`
+  and `serverInfo.instructions`. For a scanner, coverage filter = "model-visible", not
+  "field named in the spec example".
+- **Every detection rule needs the reviewer's breaking-string treatment.** The benign twins
+  passed while realistic strings (`conversation_id`, enum `environment`, ZWJ emoji, `μs`,
+  "Pass your API key as the api_key parameter") false-positived. When adding a rule, write
+  the most ordinary sentence that could trip it and test it (Pattern 2, but adversarial).
+- **Invisible chars in source must be `\uXXXX` escapes** — corpus, detector regexes, and
+  tests alike; literal ZWJ/bidi in source breaks reviewability AND exact-match editing.

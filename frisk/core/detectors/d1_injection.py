@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-from frisk.core.detectors.base import Rule, model_visible_text, scan_item_leaves
+from frisk.core.detectors.base import Rule, model_visible_text, scan_item_leaves, scan_text
 from frisk.core.models import Finding, Inventory, Severity
 
 _I = re.IGNORECASE
@@ -22,8 +22,10 @@ RULES = [
     Rule(
         category="read-sensitive-file",
         severity=Severity.HIGH,
+        # "access" is deliberately absent from the verb list: "uses your AWS access
+        # credentials" is ordinary docs prose, not a read directive.
         pattern=re.compile(
-            r"\b(?:read|open|cat|load|fetch|access)\b[^.\n]{0,60}?"
+            r"\b(?:read|open|cat|load|fetch)\b[^.\n]{0,60}?"
             r"(?:~/\.ssh|~/\.aws|id_rsa|id_ed25519|/etc/passwd|\.env\b|private\s+key"
             r"|credentials?\b)",
             _I,
@@ -33,10 +35,14 @@ RULES = [
     Rule(
         category="env-or-secret-exfil",
         severity=Severity.HIGH,
+        # Two couplings: broad verbs are only suspicious with an env-var reference
+        # ("send $OPENAI_API_KEY"); secret nouns need an exfil-flavored verb — "pass your
+        # API key as the api_key parameter" is standard REST docs and must stay clean.
         pattern=re.compile(
-            r"\b(?:send|read|include|forward|pass|exfiltrate|copy)\b[^.\n]{0,60}?"
-            r"(?:\$[A-Z][A-Z0-9_]{3,}|environment\s+variables?|env\s+vars?"
-            r"|api[\s_-]?keys?|access\s+tokens?|passwords?)",
+            r"\b(?:send|read|include|forward|pass|exfiltrate|copy|upload)\b[^.\n]{0,60}?"
+            r"(?:\$[A-Z][A-Z0-9_]{3,}|environment\s+variables?|env\s+vars?)"
+            r"|\b(?:exfiltrate|forward|copy|smuggle|steal|harvest)\b[^.\n]{0,60}?"
+            r"(?:api[\s_-]?keys?|access\s+tokens?|passwords?|secrets?)",
             _I,
         ),
         message="directive to send environment variables or secrets",
@@ -44,10 +50,14 @@ RULES = [
     Rule(
         category="ignore-previous-instructions",
         severity=Severity.HIGH,
+        # "override" is confined to previous/prior instructions|prompts: "override the
+        # system default timezone rules" is ordinary prose.
         pattern=re.compile(
-            r"\b(?:ignore|disregard|forget|override)\b[^.\n]{0,40}?"
-            r"\b(?:previous|prior|earlier|above|system)\b[^.\n]{0,30}?"
-            r"\b(?:instructions?|prompts?|rules?|messages?|guidance)",
+            r"\b(?:ignore|disregard|forget)\b[^.\n]{0,40}?"
+            r"\b(?:previous|prior|earlier|above|system|all)\b[^.\n]{0,30}?"
+            r"\b(?:instructions?|prompts?|rules?|messages?|guidance)"
+            r"|\boverride\b[^.\n]{0,40}?\b(?:previous|prior|earlier)\b[^.\n]{0,30}?"
+            r"\b(?:instructions?|prompts?)",
             _I,
         ),
         message='"ignore previous instructions" style override',
@@ -56,7 +66,7 @@ RULES = [
         category="pseudo-tag",
         severity=Severity.HIGH,
         pattern=re.compile(
-            r"<\s*(?:important|system|instructions?|admin|hidden|secret|priority)\b[^>]*>", _I
+            r"<\s*(?:important|system|instructions?|admin|hidden|secret)\b[^>]*>", _I
         ),
         message="pseudo-tag addressed to the model (e.g. <IMPORTANT>)",
     ),
@@ -94,4 +104,12 @@ class InstructionInjection:
             findings.extend(
                 scan_item_leaves(self.id, item, RULES, field_filter=model_visible_text)
             )
+        # The server-level `instructions` field is injected into the model's context just
+        # like tool descriptions — scan it too (R16's "suspicious identity" companion).
+        for key in ("instructions", "name"):
+            value = inventory.server_info.get(key)
+            if isinstance(value, str):
+                findings.extend(
+                    scan_text(self.id, "(server)", f"serverInfo.{key}", value, RULES)
+                )
         return findings

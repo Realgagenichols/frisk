@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 
-from frisk.core.detectors.base import Rule, scan_item_leaves
+from frisk.core.detectors.base import Rule, model_visible_text, scan_item_leaves
 from frisk.core.models import Finding, Inventory, Severity
 from frisk.core.sanitize import make_evidence
 
@@ -57,11 +57,14 @@ _STEERING_RULES = [
     Rule(
         category="steering-away",
         severity=Severity.MEDIUM,
+        # Both alternations are tool/server-scoped: "do not use any other encoding" is
+        # ordinary format prose and must stay clean (Pattern 2).
         pattern=re.compile(
             r"\b(?:other|built-?in|native)\b[^.\n]{0,40}?\btools?\b[^.\n]{0,40}?"
             r"\b(?:unreliable|broken|deprecated|unsafe|avoid|should\s+not|must\s+not)\b"
             r"|\b(?:do\s+not|don'?t|never|avoid)\s+us(?:e|ing)\b[^.\n]{0,40}?"
-            r"\b(?:other|built-?in|native|any\s+other)\b",
+            r"\b(?:other|built-?in|native|any\s+other)\b[^.\n]{0,30}?"
+            r"\b(?:tools?|servers?|readers?|providers?)\b",
             _I,
         ),
         message="description disparages or forbids other tools/servers",
@@ -91,12 +94,8 @@ class Shadowing:
                         ),
                     )
                 )
+            # Steering can hide in any model-visible prose (param descriptions included).
             findings.extend(
-                scan_item_leaves(
-                    self.id,
-                    item,
-                    _STEERING_RULES,
-                    field_filter=lambda p: p == "description",
-                )
+                scan_item_leaves(self.id, item, _STEERING_RULES, field_filter=model_visible_text)
             )
         return findings

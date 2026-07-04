@@ -18,15 +18,23 @@ _RULES = [
     Rule(
         category="remote-unpinned-code",
         severity=Severity.LOW,
+        # verb + code-noun alone is NOT enough — "executes the provided Python code in a
+        # sandbox" is a legitimate server class. The rule additionally requires a remote /
+        # unpinned coupling (URL, "at call time", "latest").
         pattern=re.compile(
             r"\b(?:runs?|executes?|fetch(?:es)?|downloads?|loads?|installs?|pulls?)\b"
             r"[^.\n]{0,80}?\b(?:script|code|binary|package|plugin|executable)\b"
+            r"[^.\n]{0,60}?(?:https?://|\bat\s+call\s+time\b|\bremote\b|\blatest\b)"
+            r"|\b(?:latest|newest)\b[^.\n]{0,40}?"
+            r"\b(?:script|code|binary|package|plugin|executable)\b"
             r"|\b(?:latest|newest)\b[^.\n]{0,40}?\bfrom\s+https?://",
             _I,
         ),
         message="code sourced from a remote/unpinned location",
     ),
 ]
+
+_UNPINNED_VERSIONS = {"latest", "dev", "head", "main", "master", "nightly"}
 
 
 class MetadataHygiene:
@@ -43,16 +51,29 @@ class MetadataHygiene:
 
     def _check_server_identity(self, inventory: Inventory) -> list[Finding]:
         info = inventory.server_info
+        findings: list[Finding] = []
         missing = [k for k in ("name", "version") if not info.get(k)]
-        if not missing:
-            return []
-        return [
-            Finding(
-                detector=self.id,
-                severity=Severity.LOW,
-                item_ref="(server)",
-                field="serverInfo",
-                message=f"server identity metadata missing: {', '.join(missing)}",
-                evidence=Evidence(category="missing-server-identity"),
+        if missing:
+            findings.append(
+                Finding(
+                    detector=self.id,
+                    severity=Severity.LOW,
+                    item_ref="(server)",
+                    field="serverInfo",
+                    message=f"server identity metadata missing: {', '.join(missing)}",
+                    evidence=Evidence(category="missing-server-identity"),
+                )
             )
-        ]
+        version = info.get("version")
+        if isinstance(version, str) and version.lower() in _UNPINNED_VERSIONS:
+            findings.append(
+                Finding(
+                    detector=self.id,
+                    severity=Severity.LOW,
+                    item_ref="(server)",
+                    field="serverInfo.version",
+                    message="server version is an unpinned moving target",
+                    evidence=Evidence(category="unpinned-server-version"),
+                )
+            )
+        return findings
