@@ -104,7 +104,11 @@ async def _serve(mode: str) -> None:
 
 
 def main() -> None:
+    # --mode overrides the env var, so callers can select a variant through argv even when a
+    # sandbox scrubs the environment (used by the CLI acceptance tests).
     mode = os.environ.get("FRISK_FIXTURE_MODE", "poisoned")
+    if "--mode" in sys.argv:
+        mode = sys.argv[sys.argv.index("--mode") + 1]
     if mode == "exit-handshake":
         # Die before the client can complete initialize — connector must fail loudly (R6).
         sys.exit(1)
