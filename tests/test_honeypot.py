@@ -1,8 +1,15 @@
 """Behavioral honeypot tests (R24): decoy seeding, access/tamper inspection, canary exfil."""
 
-from frisk.core.models import Severity
+import json
+
+from frisk.core.models import Inventory, Item, ItemKind, Severity
 from frisk.sandbox import honeypot
-from frisk.sandbox.honeypot import DECOY_RELPATHS, inspect_decoys, seed_decoys
+from frisk.sandbox.honeypot import (
+    DECOY_RELPATHS,
+    inspect_decoys,
+    scan_for_canary,
+    seed_decoys,
+)
 
 # --- seeding (task 1.1–1.3) ------------------------------------------------------------------
 
@@ -169,3 +176,81 @@ def test_finding_item_refs_are_unique_per_decoy(tmp_path):
     findings = inspect_decoys(decoys)
     refs = [f.item_ref for f in findings]
     assert len(refs) == len(set(refs)) == len(DECOY_RELPATHS)
+
+
+# --- exfiltration canary scan (tasks 3.1–3.2) -------------------------------------------------
+
+
+def _item(name: str, description: str) -> Item:
+    payload = {"name": name, "description": description, "inputSchema": {"type": "object"}}
+    return Item(
+        kind=ItemKind.TOOL,
+        name=name,
+        description=description,
+        input_schema=payload["inputSchema"],
+        raw_bytes=json.dumps(payload).encode("utf-8"),
+    )
+
+
+def test_canary_in_tool_description_fires_critical(tmp_path):
+    decoys = seed_decoys(tmp_path)
+    item = _item("sync_notes", f"Syncs notes. debug={decoys.canary}")
+    inventory = Inventory(items=[_item("get_weather", "Weather by city."), item])
+    findings = scan_for_canary(inventory, decoys)
+    assert len(findings) == 1
+    f = findings[0]
+    assert (f.detector, f.severity) == ("D8", Severity.CRITICAL)
+    assert f.item_ref == "tool:sync_notes"
+    assert f.evidence.category == "canary-exfiltration"
+    assert f.evidence.offset == item.raw_bytes.find(decoys.canary.encode())
+    # S3: the canary (decoy credential material) never appears in message or snippet.
+    assert decoys.canary not in f.message
+    assert f.evidence.snippet is None
+
+
+def test_canary_in_server_instructions_fires_critical(tmp_path):
+    decoys = seed_decoys(tmp_path)
+    inventory = Inventory(
+        items=[_item("get_weather", "Weather by city.")],
+        server_info={"name": "srv", "instructions": f"token cache: {decoys.canary}"},
+    )
+    findings = scan_for_canary(inventory, decoys)
+    assert [(f.item_ref, f.field, f.severity) for f in findings] == [
+        ("(server)", "serverInfo.instructions", Severity.CRITICAL)
+    ]
+
+
+def test_aws_access_key_fragment_alone_is_detected(tmp_path):
+    """The AWS decoy's access-key-id carries only AKIA + a 16-char canary fragment; a thief
+    exfiltrating just the key id must still be caught (§1 review note)."""
+    decoys = seed_decoys(tmp_path)
+    fragment = "AKIA" + decoys.canary[:16].upper()
+    inventory = Inventory(items=[_item("backup", f"Backs up. id={fragment}")])
+    findings = scan_for_canary(inventory, decoys)
+    assert [(f.item_ref, f.evidence.category) for f in findings] == [
+        ("tool:backup", "canary-exfiltration")
+    ]
+
+
+def test_lookalike_hex_is_not_flagged(tmp_path):
+    """N2 false-positive twin: a hex string of identical length/shape that is NOT this
+    scan's canary (e.g. a legitimate commit SHA) must not fire."""
+    decoys = seed_decoys(tmp_path)
+    other = seed_decoys(tmp_path / "other")  # a different scan's canary: same shape
+    sha = "d4c3b2a1" * 5  # 40 hex chars, commit-SHA shaped
+    inventory = Inventory(
+        items=[
+            _item("git_log", f"Shows commits like {sha}."),
+            _item("sync", f"debug={other.canary}"),
+        ]
+    )
+    assert scan_for_canary(inventory, decoys) == []
+
+
+def test_one_finding_per_item_even_with_multiple_hits(tmp_path):
+    decoys = seed_decoys(tmp_path)
+    inventory = Inventory(
+        items=[_item("leak", f"a={decoys.canary} b={decoys.canary}")],
+    )
+    findings = scan_for_canary(inventory, decoys)
+    assert len(findings) == 1  # first offset only; one item, one finding

@@ -46,12 +46,12 @@ exists.
       the inspector itself must not flip atime — N2
 
 ## 3. Exfiltration canary scan
-- [ ] 3.1 `scan_for_canary(inventory, decoys) -> list[Finding]`: search each item's
+- [x] 3.1 `scan_for_canary(inventory, decoys) -> list[Finding]`: search each item's
       `raw_bytes` (raw form, not a re-serialization — Pattern 12) and `server_info` values
       for the canary token → CRITICAL `D8` finding (category `canary-exfiltration`) with
       item ref + field + offset; snippet is the category label, not surrounding decoy
       content (S3) — R24, S3
-- [ ] 3.2 Tests: inventory with canary embedded in a tool description raw bytes → CRITICAL
+- [x] 3.2 Tests: inventory with canary embedded in a tool description raw bytes → CRITICAL
       with correct item_ref/offset; canary in `server_info.instructions` → CRITICAL; benign
       inventory containing a hex string of the same length/shape as a canary → NOT flagged
       (N2, false-positive twin) — R24, N2

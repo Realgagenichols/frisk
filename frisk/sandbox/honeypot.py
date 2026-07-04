@@ -26,7 +26,7 @@ import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
-from frisk.core.models import Evidence, Finding, Severity
+from frisk.core.models import Evidence, Finding, Inventory, Severity
 
 DETECTOR_ID = "D8"
 
@@ -150,6 +150,65 @@ def inspect_decoys(decoys: DecoySet) -> list[Finding]:
                 )
             )
     return findings
+
+
+def scan_for_canary(inventory: Inventory, decoys: DecoySet) -> list[Finding]:
+    """Flag decoy credential material surfacing in the enumerated definitions (R24).
+
+    Searches each item's ``raw_bytes`` — the advertised JSON exactly as received, the
+    representation the canary would land in (Pattern 12; the canary is pure hex, which JSON
+    escaping cannot transform) — plus ``server_info`` string values. Two tokens: the full
+    canary, and the AKIA-prefixed key-id fragment (the AWS decoy's access-key-id carries
+    only the first 16 canary chars, and a thief may exfiltrate just the key id). Evidence is
+    category + offset only — the canary is fake, but report output never carries credential
+    material (S3). One finding per item: first match wins.
+    """
+    tokens = (decoys.canary, "AKIA" + decoys.canary[:16].upper())
+    message = "decoy credential material in advertised definition (exfiltration attempt)"
+    findings: list[Finding] = []
+    for item in inventory.items:
+        for token in tokens:
+            offset = item.raw_bytes.find(token.encode("utf-8"))
+            if offset != -1:
+                findings.append(
+                    Finding(
+                        detector=DETECTOR_ID,
+                        severity=Severity.CRITICAL,
+                        item_ref=item.ref,
+                        field="raw",
+                        message=message,
+                        evidence=Evidence(category="canary-exfiltration", offset=offset),
+                    )
+                )
+                break
+    for path, value in _server_info_strings(inventory.server_info):
+        for token in tokens:
+            offset = value.find(token)
+            if offset != -1:
+                findings.append(
+                    Finding(
+                        detector=DETECTOR_ID,
+                        severity=Severity.CRITICAL,
+                        item_ref="(server)",
+                        field=path,
+                        message=message,
+                        evidence=Evidence(category="canary-exfiltration", offset=offset),
+                    )
+                )
+                break
+    return findings
+
+
+def _server_info_strings(node: object, path: str = "serverInfo"):
+    """Yield (dotted_path, str) for every string in server_info, however nested."""
+    if isinstance(node, str):
+        yield path, node
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            yield from _server_info_strings(value, f"{path}.{key}")
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _server_info_strings(value, f"{path}[{index}]")
 
 
 def _finding(relpath: str, severity: Severity, category: str, message: str) -> Finding:
