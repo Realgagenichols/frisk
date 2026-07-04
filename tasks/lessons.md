@@ -1,5 +1,9 @@
 # Lessons — frisk
 
+- **Never `git add -A` for a scoped commit once the next task's files exist.** A §1-fixes
+  commit swept in freshly created §2 files, mislabeling history. Stage by explicit path;
+  `-A` only when the whole tree genuinely belongs to one commit.
+
 - **Evidence anchors need unique field paths.** Any `(field_path, offset)` evidence scheme
   requires every path to resolve to exactly ONE string. Dict keys vs. values collided on the
   same path in the leaf walker (§2 review); key leaves now get a `#key` suffix. When adding

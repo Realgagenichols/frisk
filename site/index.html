@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>frisk playground — vet an MCP server before you trust it</title>
+<meta name="description" content="Paste an MCP server's tools/list JSON and run frisk's deterministic security detectors entirely in your browser. Nothing is uploaded.">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230a0d12'/%3E%3Cpath d='M3 3h10v2H5v3h7v2H5v3H3z' fill='%23e8a33d'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="masthead">
+  <div class="wordmark">
+    <span class="wordmark-sigil" aria-hidden="true">▚</span>
+    <h1>frisk<span class="wordmark-sub">/playground</span></h1>
+  </div>
+  <p class="tagline">Pat down a Model Context Protocol server before you trust it.
+     Deterministic detectors, run <em>in your browser</em> by the same Python core as the CLI.</p>
+  <nav class="masthead-links">
+    <a href="https://github.com/Realgagenichols/frisk">source ↗</a>
+  </nav>
+</header>
+
+<main class="workbench">
+  <!-- ══ INPUT ══ -->
+  <section class="panel" id="input-panel" aria-labelledby="input-label">
+    <div class="panel-strip">
+      <span id="input-label">INPUT — tools/list JSON</span>
+      <span class="strip-caps">stays local</span>
+    </div>
+
+    <div class="panel-body">
+      <div class="example-row" role="group" aria-label="Load an example">
+        <button type="button" class="btn-ghost" id="load-poisoned">▲ load poisoned example</button>
+        <button type="button" class="btn-ghost" id="load-benign">● load benign example</button>
+        <button type="button" class="btn-ghost" id="clear-input">✕ clear</button>
+      </div>
+
+      <textarea id="paste-input" spellcheck="false" autocomplete="off"
+        aria-label="Paste tools/list JSON here"
+        placeholder='Paste the JSON result of an MCP tools/list call, e.g.
+
+{
+  "tools": [
+    { "name": "get_weather", "description": "…", "inputSchema": { … } }
+  ]
+}
+
+A bare array, a {"tools": […]} object, or a full JSON-RPC response all work.'></textarea>
+
+      <div class="scan-row">
+        <button type="button" class="btn-scan" id="scan-btn" disabled>
+          <span class="btn-scan-beam" aria-hidden="true"></span>SCAN
+        </button>
+        <p class="boot-status" id="boot-status" role="status" aria-live="polite">
+          <span class="boot-dot" aria-hidden="true"></span><span id="boot-status-text">loading Python runtime…</span>
+        </p>
+      </div>
+
+      <div class="error-banner" id="error-banner" role="alert" hidden>
+        <strong>CANNOT SCAN</strong>
+        <span id="error-text"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ REPORT ══ -->
+  <section class="panel" id="report-panel" aria-labelledby="report-label">
+    <div class="panel-strip">
+      <span id="report-label">REPORT</span>
+      <span class="strip-caps" id="report-meta"></span>
+    </div>
+
+    <div class="panel-body" id="report-body" aria-live="polite">
+      <div class="report-empty" id="report-empty">
+        <p class="empty-glyph" aria-hidden="true">[ ]</p>
+        <p>Nothing inspected yet.</p>
+        <p class="empty-hint">Load the poisoned example to watch the detectors fire —
+           D1 injection, D2 hidden characters, D3 sensitive parameters, and friends.</p>
+      </div>
+      <!-- report renders here; every dynamic value is inserted via textContent (R15) -->
+    </div>
+  </section>
+</main>
+
+<footer class="colophon">
+  <p><strong>Nothing leaves your browser.</strong> This page is static: no backend, no analytics,
+     no storage. Your paste is parsed and scanned by
+     <a href="https://pyodide.org">Pyodide</a> (Python-in-WASM) loaded from a pinned CDN —
+     the only network request this page makes.</p>
+  <p class="colophon-fine">frisk runs the detector core — the identical package the CLI ships —
+     so the verdict here matches <code>frisk scan</code>. For sandboxed live enumeration
+     (stdio servers, rug-pull lockfiles), use the CLI.</p>
+</footer>
+
+<script src="examples.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

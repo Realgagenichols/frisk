@@ -17,12 +17,12 @@
 - [x] 2.2 Write `tests/test_site_bundle.py`: run the build script, unpack the zip to a temp dir, and in a subprocess with `mcp`/`anyio`/`pydantic`/HTTP modules blocked (recreate the de-risk import-blocker), run the full pipeline: `inventory_from_json` → `run_detectors` → `assess` → `render_json` on a poisoned paste. `uv run pytest tests/test_site_bundle.py` — R20, R23
 
 ## 3. Playground site — paste mode
-- [ ] 3.1 Scaffold `site/` (index.html, style.css, app.js) — invoke the **frontend-design skill** for the UI; pin Pyodide to an exact CDN version (Pattern 5) — R20
-- [ ] 3.2 `site/scan.py` (Pyodide bootstrap, loaded by JS): unpack `frisk_core.zip`, define `scan_json(text) -> str` = ingest → `run_detectors` → `assess` → `render_json`, with verdict + score included. Site-glue only; zero detector logic — R20, R23
-- [ ] 3.3 app.js: init Pyodide + load bundle with a visible loading state; paste textarea + Scan button; `IngestError` message shown as an error banner (loud, never a blank "clean") — R21
-- [ ] 3.4 Report rendering: verdict badge, risk score, findings list (severity, item ref, field, message, evidence snippet/offset). **Every dynamic value inserted via `textContent`/`createTextNode` — never `innerHTML`** (evidence snippets are attacker-controlled; browser analog of R15's C0-escaping) — R21, R15
-- [ ] 3.5 Bundled example JSONs (poisoned + benign twin) with "Load example" buttons; invisible chars stored as `\uXXXX` escapes in the fixture files (lesson) — R21, N2
-- [ ] 3.6 Zero-backend audit: page makes no requests except the pinned Pyodide CDN and same-origin assets; no analytics, no storage; footer states nothing leaves the browser — R22
+- [x] 3.1 Scaffold `site/` (index.html, style.css, app.js) — invoke the **frontend-design skill** for the UI; pin Pyodide to an exact CDN version (Pattern 5) — R20
+- [x] 3.2 `site/scan.py` (Pyodide bootstrap, loaded by JS): unpack `frisk_core.zip`, define `scan_json(text) -> str` = ingest → `run_detectors` → `assess` → `render_json`, with verdict + score included. Site-glue only; zero detector logic — R20, R23
+- [x] 3.3 app.js: init Pyodide + load bundle with a visible loading state; paste textarea + Scan button; `IngestError` message shown as an error banner (loud, never a blank "clean") — R21
+- [x] 3.4 Report rendering: verdict badge, risk score, findings list (severity, item ref, field, message, evidence snippet/offset). **Every dynamic value inserted via `textContent`/`createTextNode` — never `innerHTML`** (evidence snippets are attacker-controlled; browser analog of R15's C0-escaping) — R21, R15
+- [x] 3.5 Bundled example JSONs (poisoned + benign twin) with "Load example" buttons; invisible chars stored as `\uXXXX` escapes in the fixture files (lesson) — R21, N2
+- [x] 3.6 Zero-backend audit: page makes no requests except the pinned Pyodide CDN and same-origin assets; no analytics, no storage; footer states nothing leaves the browser — R22
 
 ## 4. Direct-connect (best-effort CORS)
 - [ ] 4.1 `site/connect.js`: minimal MCP streamable-HTTP client via `fetch` — JSON-RPC `initialize` handshake, then `tools/list`, `resources/list`, `prompts/list`; optional Bearer token from a `type=password` input. (Connector logic, not detector logic — a JS transport doesn't violate R23) — R22
