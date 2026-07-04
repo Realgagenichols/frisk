@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from contextlib import asynccontextmanager
 from typing import Any
 
 from frisk.connector.target import RemoteTarget, StdioTarget, Target
-from frisk.core.models import Inventory, Item, ItemKind
+from frisk.core import ingest
+from frisk.core.models import Inventory, Item
 
 
 class ConnectorError(Exception):
@@ -125,55 +125,24 @@ async def _open_transport(target: Target):
         raise ConnectorError(f"unsupported target type: {type(target).__name__}")
 
 
-def _canonical_bytes(model: Any) -> bytes:
-    """Deterministic canonical JSON of an advertised definition, for hashing + evidence (R5).
-
-    Uses ``sort_keys`` so re-enumeration produces byte-identical output for an unchanged
-    definition (stable rug-pull baseline), and ``ensure_ascii=False`` so hidden characters
-    are preserved verbatim in the bytes rather than \\u-escaped away.
-    """
-    payload = model.model_dump(mode="json", exclude_none=True)
-    return json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+# Normalization + canonical bytes live in frisk.core.ingest — the single source of truth
+# shared with the playground (R23). The connector only converts SDK models to plain dicts.
 
 
 def _tool_item(tool: Any) -> Item:
-    return Item(
-        kind=ItemKind.TOOL,
-        name=tool.name,
-        description=tool.description,
-        input_schema=tool.inputSchema,
-        raw_bytes=_canonical_bytes(tool),
-    )
+    return ingest.tool_item(_payload(tool))
 
 
 def _resource_item(resource: Any) -> Item:
-    return Item(
-        kind=ItemKind.RESOURCE,
-        name=resource.name or str(resource.uri),
-        description=resource.description,
-        input_schema=None,
-        raw_bytes=_canonical_bytes(resource),
-    )
+    return ingest.resource_item(_payload(resource))
 
 
 def _prompt_item(prompt: Any) -> Item:
-    # Expose prompt arguments as a schema so D1/D3 scan their names + descriptions too.
-    arguments = getattr(prompt, "arguments", None) or []
-    properties = {
-        arg.name: {
-            "type": "string",
-            **({"description": arg.description} if arg.description else {}),
-        }
-        for arg in arguments
-    }
-    schema = {"type": "object", "properties": properties} if properties else None
-    return Item(
-        kind=ItemKind.PROMPT,
-        name=prompt.name,
-        description=prompt.description,
-        input_schema=schema,
-        raw_bytes=_canonical_bytes(prompt),
-    )
+    return ingest.prompt_item(_payload(prompt))
+
+
+def _payload(model: Any) -> dict[str, Any]:
+    return model.model_dump(mode="json", exclude_none=True)
 
 
 def _server_info(init: Any) -> dict[str, Any]:

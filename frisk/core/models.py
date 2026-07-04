@@ -57,6 +57,11 @@ class Inventory:
     items: list[Item] = field(default_factory=list)
     # Raw server identity metadata (name/version/instructions) for D7 hygiene checks (R16).
     server_info: dict[str, Any] = field(default_factory=dict)
+    # False when the input channel could not carry serverInfo at all (e.g. a pasted bare
+    # tools/list, R21). D7 then skips the missing-identity check: "not provided by the
+    # channel" is not evidence of "not provided by the server" (Pattern 2). The CLI
+    # connector always sees the initialize result, so it always leaves this True.
+    server_info_known: bool = True
 
 
 @dataclass(frozen=True)

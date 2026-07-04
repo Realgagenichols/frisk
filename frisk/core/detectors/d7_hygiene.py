@@ -56,7 +56,7 @@ class MetadataHygiene:
         info = inventory.server_info
         findings: list[Finding] = []
         missing = [k for k in ("name", "version") if not info.get(k)]
-        if missing:
+        if missing and inventory.server_info_known:
             findings.append(
                 Finding(
                     detector=self.id,
