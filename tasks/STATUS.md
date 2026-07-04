@@ -1,12 +1,10 @@
 # STATUS — frisk
 
-**Phase:** Brainstorm complete. SPEC.md + design doc written. Awaiting user review.
-**Active milestone:** M1 (CLI core) — not yet planned.
-**Last done:** Finalized all design decisions; wrote SPEC.md, docs/design/frisk-design.md, CLAUDE.md.
-**In progress:** none.
-**Next action:** User reviews SPEC.md → run `/plan` for M1.
-**Blockers:** none. Not yet a git repo; not scaffolded (no pyproject/src). Design artifacts not committed (awaiting SPEC approval).
-
-Locked decisions: connect-and-enumerate (sandboxed) · detectors D1–D7 · Python core + Pyodide
-(single source) · seatbelt + fake HOME + rlimits sandbox · GitHub Pages browser-only playground
-+ CLI · name = frisk · milestones M1 CLI / M2 playground / M3 honeypot.
+**Updated:** 2026-07-03
+**Active milestone:** M1 (CLI core). On branch `m1-cli-core`.
+**Last done:** §5–§12 complete (all six detectors + score + reporter). Batched section review
+found W1–W7; all fixed with 22 regression tests. 100 tests green. Reviewer re-verifying fixes
+in background (agent a7f538690e18c0c0f).
+**In progress:** §13 fixture MCP server harness.
+**Next action:** finish §13, then §14 connector, §15 sandbox, §16 lockfile, §17 CLI, §18 polish.
+**Blockers:** none.
