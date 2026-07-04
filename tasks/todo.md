@@ -54,8 +54,8 @@ before marking a section done (Pattern 10).
 - [x] 10.2 Tests: unpinned/remote source → LOW/INFO; benign pinned + identified server NOT flagged — R16, N2
 
 ## 11. Risk score & verdict — R13
-- [ ] 11.1 Weighted risk score + overall verdict (`pass`/`warn`/`fail`) from findings in `frisk/core/score.py` — R13
-- [ ] 11.2 Tests: severity weighting maps to correct verdict boundaries (clean / LOW-MEDIUM / HIGH-CRITICAL) — R13
+- [x] 11.1 Weighted risk score + overall verdict (`pass`/`warn`/`fail`) from findings in `frisk/core/score.py` — R13
+- [x] 11.2 Tests: severity weighting maps to correct verdict boundaries (clean / LOW-MEDIUM / HIGH-CRITICAL) — R13
 
 ## 12. Reporter — R17, R18, R15, S3
 - [ ] 12.1 Human-readable report; C0-escape ALL read-back values before terminal render — R17, R15, Pattern 13
