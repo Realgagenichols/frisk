@@ -217,9 +217,9 @@ frisk scan <target>
 
 - [x] **M1 — CLI core.** R1–R18, S3, N1–N4. Sandboxed connect-and-enumerate, detectors D1–D7,
   risk score + verdict, human/JSON reports + CI exit codes, `frisk.lock` + `frisk verify`.
-- **M2 — Playground.** R20–R23. GitHub Pages site running the same detector core via Pyodide;
+- [x] **M2 — Playground.** R20–R23. GitHub Pages site running the same detector core via Pyodide;
   paste-JSON plus best-effort CORS direct-connect; zero backend, nothing uploaded.
-- **M3 — Behavioral honeypot.** R24. Decoy credentials in the sandbox HOME; detect access /
+- [ ] **M3 — Behavioral honeypot.** R24. Decoy credentials in the sandbox HOME; detect access /
   exfiltration attempts during enumeration.
 
 ---

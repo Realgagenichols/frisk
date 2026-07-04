@@ -37,8 +37,35 @@
 ## 6. Integration & polish
 - [x] 6.1 Local browser verification (`python -m http.server -d site`): poisoned example → findings + verdict match `frisk scan` on the equivalent fixture; benign example → clean. Record results in Review — R20, R21, R23
 - [x] 6.2 Verify direct-connect failure path against a non-CORS URL (error + paste-mode guidance shown) — R22
-- [ ] 6.3 `uv run ruff check .` clean; full `uv run pytest` passes — N3
-- [ ] 6.4 Check off M2 in SPEC.md Milestones; overwrite tasks/STATUS.md
+- [x] 6.3 `uv run ruff check .` clean; full `uv run pytest` passes — N3
+- [x] 6.4 Check off M2 in SPEC.md Milestones; overwrite tasks/STATUS.md
 
 ## Review
-<!-- Results added after each section -->
+
+**§1 (core ingest)** — reviewer: ready. 1 WARNING (paste-vs-CLI raw_bytes divergence on
+`_meta`/AnyUrl/null-key shapes) resolved as a documented deliberate limitation + lesson;
+fixture canonicalization deduped. Parity tests prove byte-identical hashes + findings for
+round-trip-clean definitions; lockfile hashes unchanged by the refactor.
+
+**§2 (Pyodide bundle)** — reviewer: ready. Fixed: commit scoping (history rewritten before
+push), drift guard now inspects the built zip manifest. Bundle proven to run the full
+pipeline with mcp/anyio/pydantic/HTTP blocked and imports resolving from the bundle (P9).
+
+**§3 (site paste mode)** — reviewer: ready, 0 warnings. textContent-only rendering verified
+by grep + attribute-flow audit; zero-backend audit clean; INFO polish applied (benign
+get_weather twin, reduced-motion beam).
+
+**§4 (direct-connect)** — reviewer: ready. 1 WARNING fixed: CRLF SSE framing (tested LF+CRLF
+with leading notification events). Token audit clean: one sink (Authorization header to the
+typed URL), no storage/logging. Verified against a real streamable-HTTP FastMCP server.
+
+**§6 (browser E2E, Playwright)** — boot→ready; poisoned example FAIL 100/100 with
+D1,D2,D3,D4,D7 (identical to scan.py/CLI pipeline on same input); benign PASS + clean note;
+malformed paste → loud IngestError banner; XSS probe (`<img onerror>`/`<script>` in
+name/description) rendered inert, zero injected elements; direct-connect to non-CORS URL →
+specific error + paste guidance; request origins = same-origin + pinned jsdelivr only.
+Screenshot review caught a real bug ([hidden] beaten by author display) — fixed + lesson.
+Script committed as scripts/e2e_playground.mjs.
+
+**Final gate** — pytest 178/178 (unpiped exit 0), ruff clean. Spec coverage: R20 ✅ R21 ✅
+R22 ✅ (MAY implemented; SHALL subclauses verified) R23 ✅. SPEC M2 checked off.
