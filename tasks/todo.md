@@ -13,8 +13,8 @@
 - [x] 1.5 Benign-twin paste fixture: ordinary `tools/list` output with legit-but-odd fields (e.g. `annotations`, extra vendor keys) → parses clean, zero findings — N2, R21
 
 ## 2. Pyodide bundle — single-source build
-- [ ] 2.1 `scripts/build_site.py`: zip `frisk/__init__.py` + `frisk/core/**` from the repo source tree into `site/dist/frisk_core.zip`; gitignore `site/dist/`. The bundle is always *generated* from source — no committed/hand-copied detector code anywhere — R23, R20
-- [ ] 2.2 Write `tests/test_site_bundle.py`: run the build script, unpack the zip to a temp dir, and in a subprocess with `mcp`/`anyio`/`pydantic`/HTTP modules blocked (recreate the de-risk import-blocker), run the full pipeline: `inventory_from_json` → `run_detectors` → `assess` → `render_json` on a poisoned paste. `uv run pytest tests/test_site_bundle.py` — R20, R23
+- [x] 2.1 `scripts/build_site.py`: zip `frisk/__init__.py` + `frisk/core/**` from the repo source tree into `site/dist/frisk_core.zip`; gitignore `site/dist/`. The bundle is always *generated* from source — no committed/hand-copied detector code anywhere — R23, R20
+- [x] 2.2 Write `tests/test_site_bundle.py`: run the build script, unpack the zip to a temp dir, and in a subprocess with `mcp`/`anyio`/`pydantic`/HTTP modules blocked (recreate the de-risk import-blocker), run the full pipeline: `inventory_from_json` → `run_detectors` → `assess` → `render_json` on a poisoned paste. `uv run pytest tests/test_site_bundle.py` — R20, R23
 
 ## 3. Playground site — paste mode
 - [ ] 3.1 Scaffold `site/` (index.html, style.css, app.js) — invoke the **frontend-design skill** for the UI; pin Pyodide to an exact CDN version (Pattern 5) — R20
