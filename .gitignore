@@ -14,3 +14,9 @@ build/
 .DS_Store
 # frisk runtime artifacts
 frisk.lock
+# AI workflow artifacts (local only, not part of the published repo)
+CLAUDE.md
+SPEC.md
+tasks/
+changes/
+docs/
