@@ -37,5 +37,9 @@
   offset (UTF-8) by contract, but a new `str.find` call site shipped char offsets (§3
   review). When constructing Evidence outside `make_evidence`, grep for `.find(` feeding
   `offset=` and test with a non-ASCII prefix.
+- **Every new ad-hoc print site for Finding fields bypasses R15.** C0-escaping lives in the
+  core renderers; a new `print` of item_ref/message must route through `c0_escape`. "This
+  value is a frisk constant" must be checked per BRANCH constructing the Finding, not per
+  detector — the canary branch's item_ref is a server-controlled tool name (§4 review).
 - **Invisible chars in source must be `\uXXXX` escapes** — corpus, detector regexes, and
   tests alike; literal ZWJ/bidi in source breaks reviewability AND exact-match editing.

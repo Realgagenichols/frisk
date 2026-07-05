@@ -11,6 +11,7 @@ from frisk.core.detectors import ALL_DETECTORS
 from frisk.core.engine import run_detectors
 from frisk.core.models import Finding, Inventory, Severity
 from frisk.core.report import render_human, render_json
+from frisk.core.sanitize import c0_escape
 from frisk.core.score import Assessment, assess, exit_code
 from frisk.lockfile import LockError, diff_lock, read_lock, render_diff, write_lock
 from frisk.sandbox import SandboxOptions, inspect_decoys, prepare_stdio, scan_for_canary
@@ -131,6 +132,13 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     return exit_code(assessment)
 
 
+def _honeypot_line(f: Finding) -> str:
+    """One stderr line per honeypot finding. item_ref can embed a server-controlled tool
+    name (canary-in-raw-bytes branch), so everything is C0-escaped before hitting the
+    terminal (R15) — this is the only Finding sink outside the core renderers."""
+    return f"honeypot: [{f.severity.name}] {c0_escape(f.item_ref)} — {c0_escape(f.message)}"
+
+
 def _cmd_verify(args: argparse.Namespace) -> int:
     locked = read_lock(args.lock)
     inventory, honeypot_findings = _enumerate(args)
@@ -140,7 +148,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     # even when the definitions themselves have not drifted (R24, R18). INFO-level
     # honeypot notes (e.g. an inspection error) are reported but do not gate.
     for f in honeypot_findings:
-        print(f"honeypot: [{f.severity.name}] {f.item_ref} — {f.message}", file=sys.stderr)
+        print(_honeypot_line(f), file=sys.stderr)
     if any(f.severity >= Severity.HIGH for f in honeypot_findings):
         return EXIT_OPERATIONAL_ERROR
     return EXIT_OPERATIONAL_ERROR if diff.changed else 0

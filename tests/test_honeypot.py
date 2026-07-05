@@ -275,3 +275,23 @@ def test_item_finding_field_is_raw(tmp_path):
     decoys = seed_decoys(tmp_path)
     inventory = Inventory(items=[_item("leak", f"x={decoys.canary}")])
     assert scan_for_canary(inventory, decoys)[0].field == "raw"
+
+
+def test_verify_honeypot_line_escapes_server_controlled_item_ref():
+    """R15 (§4 review): the verify stderr line is the only Finding sink outside the core
+    renderers; a canary finding's item_ref embeds a server-controlled tool name, so ANSI
+    and newlines must be escaped before reaching the terminal."""
+    from frisk.cli import _honeypot_line
+    from frisk.core.models import Evidence, Finding
+
+    hostile = Finding(
+        detector="D8",
+        severity=Severity.CRITICAL,
+        item_ref="tool:evil\x1b[2K\nfaked-clean-line",
+        field="raw",
+        message="decoy credential material in advertised definition (exfiltration attempt)",
+        evidence=Evidence(category="canary-exfiltration", offset=0),
+    )
+    line = _honeypot_line(hostile)
+    assert "\x1b" not in line and "\n" not in line
+    assert "\\u001b" in line or "\\x1b" in line  # escaped, not stripped — evidence intact
