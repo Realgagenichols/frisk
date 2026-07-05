@@ -166,7 +166,7 @@ RFC 2119 keywords. IDs: `R` functional, `N` non-functional, `S` security.
 
 ### Behavioral honeypot (M3)
 
-- **R24** — `frisk` SHALL seed the sandbox's fake `$HOME` with decoy credentials and SHALL
+- [x] **R24** — `frisk` SHALL seed the sandbox's fake `$HOME` with decoy credentials and SHALL
   detect and report if the server accesses or attempts to exfiltrate them during enumeration.
 
 ### Non-functional
@@ -219,7 +219,7 @@ frisk scan <target>
   risk score + verdict, human/JSON reports + CI exit codes, `frisk.lock` + `frisk verify`.
 - [x] **M2 — Playground.** R20–R23. GitHub Pages site running the same detector core via Pyodide;
   paste-JSON plus best-effort CORS direct-connect; zero backend, nothing uploaded.
-- [ ] **M3 — Behavioral honeypot.** R24. Decoy credentials in the sandbox HOME; detect access /
+- [x] **M3 — Behavioral honeypot.** R24. Decoy credentials in the sandbox HOME; detect access /
   exfiltration attempts during enumeration.
 
 ---

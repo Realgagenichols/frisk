@@ -41,5 +41,10 @@
   core renderers; a new `print` of item_ref/message must route through `c0_escape`. "This
   value is a frisk constant" must be checked per BRANCH constructing the Finding, not per
   detector — the canary branch's item_ref is a server-controlled tool name (§4 review).
+- **`evidence.snippet` is the only sink that echoes raw definition text — enforce S3 there.**
+  Tool descriptions are attacker-controlled and can carry secrets; any new detector that
+  copies matched text into `snippet` reopens the leak vector. Regression-guard snippet output
+  against the per-run canary, not just literal template strings (§5 review). Today only D2
+  emits snippets.
 - **Invisible chars in source must be `\uXXXX` escapes** — corpus, detector regexes, and
   tests alike; literal ZWJ/bidi in source breaks reviewability AND exact-match editing.

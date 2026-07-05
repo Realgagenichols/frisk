@@ -82,9 +82,33 @@ To run it locally: `python scripts/build_site.py && python -m http.server -d sit
 | D5 | shadowing / impersonation (common tool-name collisions, steering language) |
 | D6 | rug-pull (the `frisk.lock` baseline + `frisk verify` diff) |
 | D7 | metadata hygiene (remote/unpinned code sourcing, missing/unpinned server identity) |
+| D8 | behavioral honeypot (a stdio server that reads, tampers with, or exfiltrates the sandbox's decoy credentials during enumeration) |
 
-Detectors are pure, deterministic, network-free, and LLM-free — the single source of truth
-shared by the CLI and the browser playground, which runs the same code under Pyodide.
+Detectors D1–D7 are pure, deterministic, network-free, and LLM-free — the single source of
+truth shared by the CLI and the browser playground, which runs the same code under Pyodide.
+D8 is a CLI-only behavioral check (it observes the sandboxed process), so it does not run in
+the playground.
+
+## Behavioral honeypot
+
+Beyond inspecting the *definitions*, `frisk` watches what a local stdio server actually **does**
+during enumeration. It seeds the throwaway fake `$HOME` with realistic-looking **decoy
+credentials** — `~/.ssh/id_rsa`, `~/.aws/credentials`, `~/.netrc`, `~/.config/gh/hosts.yml` —
+each carrying a unique per-scan canary token, then reports:
+
+| finding | severity | when |
+|---------|----------|------|
+| `decoy-access` | HIGH | the server **read** a decoy (detected via access-time diff) |
+| `decoy-tamper` | HIGH | the server **modified or deleted** a decoy |
+| `canary-exfiltration` | CRITICAL | a decoy's canary token surfaces in the **advertised definitions** — the server is smuggling stolen credentials back over the MCP channel |
+
+A well-behaved server touches none of these. The decoy values are fake, and — like every other
+finding — evidence references categories, paths, and byte offsets only, never the decoy
+contents (so the report itself never carries credential-shaped material). Access detection
+relies on filesystem access times; where the filesystem doesn't update them, `frisk` prints a
+warning and keeps tamper + exfiltration detection active — never a silent downgrade. The
+honeypot runs in every sandbox mode, including `--no-sandbox`, and gates `frisk verify` too: a
+verify run that catches credential theft exits non-zero even when the definitions are unchanged.
 
 ## Sandbox (macOS)
 
