@@ -28,6 +28,7 @@ await page.waitForSelector(".stamp.fail", { timeout: 15000 });
 const failScore = await page.textContent(".gauge-label strong");
 const detectors = await page.$$eval(".detector-tag", (els) => [...new Set(els.map(e => e.textContent))].sort());
 console.log("poisoned: FAIL,", failScore.trim(), "detectors:", detectors.join(","));
+await page.waitForTimeout(900); // let stamp/row animations settle — screenshots show the final state
 await page.screenshot({ path: process.argv[2] + "/playground-poisoned.png", fullPage: true });
 
 // Benign example → PASS, clean
@@ -91,9 +92,13 @@ await fallbackPage.waitForSelector(".stamp.fail", { timeout: 15000 });
 if (!(await fallbackPage.locator("h1").isVisible())) {
   throw new Error("header not visible with fonts blocked");
 }
-// TODO(todo 2.2): once the reskin consumes the font families, assert
-// blockedFontRequests > 0 — a fallback run where fonts were never requested proves nothing.
+// Pattern 16: the probe must prove fonts were actually attempted — a fallback run where
+// no font was ever requested proves nothing (e.g. route pattern silently drifted).
+if (blockedFontRequests === 0) {
+  throw new Error("font-fallback run blocked no font requests — probe setup is dead");
+}
 console.log("font-fallback: blocked", blockedFontRequests, "font request(s); scan completed");
+await fallbackPage.waitForTimeout(900);
 await fallbackPage.screenshot({ path: process.argv[2] + "/playground-font-blocked.png", fullPage: true });
 await fallbackPage.close();
 

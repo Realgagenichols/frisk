@@ -57,7 +57,7 @@ function setBoot(state, message) {
 
 async function boot() {
   try {
-    setBoot(null, `loading Python runtime (Pyodide v${PYODIDE_VERSION})…`);
+    setBoot(null, `checkpoint opening — loading Python runtime (Pyodide v${PYODIDE_VERSION})…`);
     await new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.src = PYODIDE_BASE + "pyodide.js";
@@ -67,7 +67,7 @@ async function boot() {
     });
     const pyodide = await loadPyodide({ indexURL: PYODIDE_BASE });
 
-    setBoot(null, "loading frisk detector core…");
+    setBoot(null, "checkpoint opening — loading frisk detector core…");
     const zipResponse = await fetch("dist/frisk_core.zip");
     if (!zipResponse.ok) {
       throw new Error(
@@ -82,10 +82,10 @@ async function boot() {
     pyodide.runPython(await glueResponse.text());
     scanJsonPy = pyodide.globals.get("scan_json");
 
-    setBoot("ready", "detector core ready — same code the CLI runs");
+    setBoot("ready", "screening equipment ready — same code the CLI runs");
     $("scan-btn").disabled = false;
   } catch (err) {
-    setBoot("failed", "boot failed");
+    setBoot("failed", "checkpoint closed");
     showError(`${err.message}. The playground needs the Pyodide CDN once; ` +
       "your definitions still never leave the browser.");
   }

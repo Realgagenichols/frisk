@@ -6,28 +6,30 @@
 <title>frisk playground — vet an MCP server before you trust it</title>
 <meta name="description" content="Paste an MCP server's tools/list JSON and run frisk's deterministic security detectors entirely in your browser. Nothing is uploaded.">
 <link rel="stylesheet" href="style.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230a0d12'/%3E%3Cpath d='M3 3h10v2H5v3h7v2H5v3H3z' fill='%23e8a33d'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%231b2a44'/%3E%3Cpath d='M3 3h10v2H5v3h7v2H5v3H3z' fill='%23f4f1ea'/%3E%3C/svg%3E">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
 
-<header class="masthead">
-  <div class="wordmark">
-    <span class="wordmark-sigil" aria-hidden="true">▚</span>
-    <h1>frisk<span class="wordmark-sub">/playground</span></h1>
+<header class="signage">
+  <div class="signage-band">
+    <div class="signage-row">
+      <h1 class="signage-title">FRISK <span aria-hidden="true">·</span> SECURITY SCREENING CHECKPOINT</h1>
+      <nav class="signage-links">
+        <a href="https://github.com/Realgagenichols/frisk">source ↗</a>
+      </nav>
+    </div>
+    <p class="signage-directive">ALL TOOL DEFINITIONS MUST BE SCREENED</p>
   </div>
   <p class="tagline">Pat down a Model Context Protocol server before you trust it.
      Deterministic detectors, run <em>in your browser</em> by the same Python core as the CLI.</p>
-  <nav class="masthead-links">
-    <a href="https://github.com/Realgagenichols/frisk">source ↗</a>
-  </nav>
 </header>
 
 <main class="workbench">
-  <!-- ══ INPUT ══ -->
+  <!-- ══ DECLARATION ══ -->
   <section class="panel" id="input-panel" aria-labelledby="input-label">
     <div class="panel-strip">
-      <span id="input-label">INPUT — tools/list JSON</span>
+      <span id="input-label">DECLARE YOUR ITEMS — tools/list JSON</span>
       <span class="strip-caps">stays local</span>
     </div>
 
@@ -52,15 +54,15 @@ A bare array, a {"tools": […]} object, or a full JSON-RPC response all work.'>
 
       <div class="scan-row">
         <button type="button" class="btn-scan" id="scan-btn" disabled>
-          <span class="btn-scan-beam" aria-hidden="true"></span>SCAN
+          <span class="btn-scan-beam" aria-hidden="true"></span>BEGIN SCREENING
         </button>
         <p class="boot-status" id="boot-status" role="status" aria-live="polite">
-          <span class="boot-dot" aria-hidden="true"></span><span id="boot-status-text">loading Python runtime…</span>
+          <span class="boot-dot" aria-hidden="true"></span><span id="boot-status-text">checkpoint opening…</span>
         </p>
       </div>
 
       <details class="connect-details" id="connect-details">
-        <summary>DIRECT CONNECT — remote server, best-effort CORS</summary>
+        <summary>REMOTE SCREENING — live server, best-effort CORS</summary>
         <div class="connect-body">
           <p class="connect-hint">Browser → server, streamable-HTTP only. Works when the server
              sends CORS headers; most don't — paste mode is the reliable path. The token is
@@ -79,25 +81,25 @@ A bare array, a {"tools": […]} object, or a full JSON-RPC response all work.'>
       </details>
 
       <div class="error-banner" id="error-banner" role="alert" hidden>
-        <strong>CANNOT SCAN</strong>
+        <strong>⛔ CANNOT SCREEN</strong>
         <span id="error-text"></span>
       </div>
     </div>
   </section>
 
-  <!-- ══ REPORT ══ -->
-  <section class="panel" id="report-panel" aria-labelledby="report-label">
+  <!-- ══ NOTICE OF INSPECTION ══ -->
+  <section class="panel panel-slip" id="report-panel" aria-labelledby="report-label">
     <div class="panel-strip">
-      <span id="report-label">REPORT</span>
+      <span id="report-label">NOTICE OF INSPECTION</span>
       <span class="strip-caps" id="report-meta"></span>
     </div>
 
     <div class="panel-body" id="report-body" aria-live="polite">
       <div class="report-empty" id="report-empty">
         <p class="empty-glyph" aria-hidden="true">[ ]</p>
-        <p>Nothing inspected yet.</p>
+        <p>Nothing on the belt yet.</p>
         <p class="empty-hint">Load the poisoned example to watch the detectors fire —
-           D1 injection, D2 hidden characters, D3 sensitive parameters, and friends.</p>
+           injected instructions, concealed content, solicited secrets, and friends.</p>
       </div>
       <!-- report renders here; every dynamic value is inserted via textContent (R15) -->
     </div>
@@ -106,9 +108,9 @@ A bare array, a {"tools": […]} object, or a full JSON-RPC response all work.'>
 
 <footer class="colophon">
   <p><strong>Nothing leaves your browser.</strong> This page is static: no backend, no analytics,
-     no storage. Your paste is parsed and scanned by
-     <a href="https://pyodide.org">Pyodide</a> (Python-in-WASM) loaded from a pinned CDN —
-     the only network request this page makes.</p>
+     no storage, no third-party requests except the pinned
+     <a href="https://pyodide.org">Pyodide</a> CDN (Python-in-WASM) — fonts and detector
+     code are served from this site. Your paste is parsed and scanned locally.</p>
   <p class="colophon-fine">frisk runs the detector core — the identical package the CLI ships —
      so the verdict here matches <code>frisk scan</code>. For sandboxed live enumeration
      (stdio servers, rug-pull lockfiles), use the CLI.</p>
