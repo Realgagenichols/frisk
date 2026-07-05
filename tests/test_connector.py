@@ -86,6 +86,36 @@ def test_remote_auth_token_never_appears_in_error_output():
     assert secret not in repr(target)  # repr=False on the token field (Pattern 11)
 
 
+@pytest.mark.regression
+def test_remote_new_style_client_receives_bearer_via_http_client(monkeypatch):
+    # Regression: mcp>=1.28 renamed streamablehttp_client → streamable_http_client and
+    # replaced the headers kwarg with a caller-supplied httpx client. Passing headers=
+    # raised TypeError on every remote scan; the token must arrive via the httpx client.
+    from contextlib import asynccontextmanager
+
+    import anyio
+    import mcp.client.streamable_http as sh
+
+    from frisk.connector.enumerate import _open_transport
+
+    seen = {}
+
+    @asynccontextmanager
+    async def fake_client(url, *, http_client=None, terminate_on_close=True):
+        seen["auth"] = http_client.headers.get("Authorization") if http_client else None
+        yield ("r", "w", lambda: None)
+
+    monkeypatch.setattr(sh, "streamable_http_client", fake_client, raising=False)
+
+    async def run():
+        target = RemoteTarget(url="https://api.example.com/mcp", auth_token="tok")
+        async with _open_transport(target) as (read_stream, write_stream):
+            assert (read_stream, write_stream) == ("r", "w")
+
+    anyio.run(run)
+    assert seen["auth"] == "Bearer tok"
+
+
 def test_remote_target_label_hides_query_and_token():
     target = RemoteTarget(url="https://api.example.com/mcp?token=abc", auth_token="t")
     assert "token=abc" not in target.label

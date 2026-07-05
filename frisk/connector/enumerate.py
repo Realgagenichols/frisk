@@ -109,11 +109,24 @@ async def _open_transport(target: Target):
         if transport in ("auto", "http"):
             import mcp.client.streamable_http as sh
 
-            # The SDK renamed streamablehttp_client → streamable_http_client; support both.
-            http_client = getattr(sh, "streamable_http_client", None) or sh.streamablehttp_client
-            async with http_client(target.url, headers=headers) as streams:
-                # streamable-http yields (read, write, get_session_id)
-                yield streams[0], streams[1]
+            # The SDK renamed streamablehttp_client → streamable_http_client and moved
+            # header injection onto a caller-supplied httpx client; support both APIs.
+            new_client = getattr(sh, "streamable_http_client", None)
+            if new_client is not None:
+                import httpx
+
+                # Mirror the SDK's own defaults (30s request / 300s SSE read).
+                async with httpx.AsyncClient(
+                    follow_redirects=True,
+                    headers=headers,
+                    timeout=httpx.Timeout(30.0, read=300.0),
+                ) as client:
+                    async with new_client(target.url, http_client=client) as streams:
+                        # streamable-http yields (read, write, get_session_id)
+                        yield streams[0], streams[1]
+            else:
+                async with sh.streamablehttp_client(target.url, headers=headers) as streams:
+                    yield streams[0], streams[1]
         elif transport == "sse":
             from mcp.client.sse import sse_client
 
