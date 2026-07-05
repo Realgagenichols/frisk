@@ -77,7 +77,16 @@ const warnStamp = (await page.textContent(".stamp.warn")).trim();
 if (warnStamp !== "ADDITIONAL SCREENING") {
   throw new Error(`warn stamp reads ${JSON.stringify(warnStamp)}, not ADDITIONAL SCREENING`);
 }
-console.log("crafted medium: ADDITIONAL SCREENING on .warn");
+// R25 D3 scenario: the crafted paste's one finding is D3 — entry leads with the
+// plain-language headline and shows the small-print ref
+const d3Headline = page.locator(".finding-headline", { hasText: "SOLICITS SENSITIVE DATA" }).first();
+if (!(await d3Headline.isVisible())) throw new Error("no visible SOLICITS SENSITIVE DATA headline");
+const d3Ref = page.locator(".finding-ref", { hasText: "ref D3" }).first();
+if (!(await d3Ref.isVisible())) throw new Error("no visible 'ref D3' small-print reference");
+// R26 scenario: the official copy still says warn — presentation never rewrites the verdict
+const rawWarn = await page.textContent(".raw-report pre");
+if (!rawWarn.includes("verdict: WARN")) throw new Error("raw report does not say verdict: WARN");
+console.log("crafted medium: ADDITIONAL SCREENING on .warn; D3 headline+ref; raw verdict WARN");
 
 // R25 fallback: an unrecognized detector code renders as the headline itself — never empty.
 // Drives renderReport directly with a crafted envelope (no detector emits D9).
