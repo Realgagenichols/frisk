@@ -3,10 +3,12 @@
 //   uv run python scripts/build_site.py
 //   python3 -m http.server 8912 -d site &
 //   npm i playwright && node scripts/e2e_playground.mjs <screenshot-dir>
-// Covers: boot, poisoned=FAIL w/ detectors, benign=PASS, malformed paste -> loud error,
-// XSS probe stays inert (R15 analog), direct-connect CORS failure guidance, origin audit
-// (R27: only third-party origin is the pinned Pyodide CDN), font-fallback run (R27: fonts
-// blocked -> page still renders and scans).
+// Covers: boot, poisoned=DENIED w/ headlines + refs (R25) and slip header (R26),
+// benign=CLEARED, crafted medium paste=ADDITIONAL SCREENING (R26), unknown-detector
+// headline fallback (R25), malformed paste -> loud error, XSS probe stays inert (R15
+// analog), direct-connect CORS failure guidance, origin audit (R27: only third-party
+// origin is the pinned Pyodide CDN), font-fallback run (R27: fonts blocked -> page still
+// renders and scans). Visibility asserted with isVisible()-style checks, not attributes.
 import { chromium } from "playwright";
 
 const BASE = "http://127.0.0.1:8912/";
@@ -21,28 +23,92 @@ await page.goto(BASE);
 await page.waitForSelector("#boot-status.ready", { timeout: 120000 });
 console.log("boot: ready");
 
-// Poisoned example → FAIL
+// Poisoned example → DENIED stamp on class .fail (R26), headline + ref entries (R25)
 await page.click("#load-poisoned");
 await page.click("#scan-btn");
 await page.waitForSelector(".stamp.fail", { timeout: 15000 });
+const failStamp = (await page.textContent(".stamp.fail")).trim();
+if (failStamp !== "DENIED") throw new Error(`fail stamp reads ${JSON.stringify(failStamp)}, not DENIED`);
 const failScore = await page.textContent(".gauge-label strong");
-const detectors = await page.$$eval(".detector-tag", (els) => [...new Set(els.map(e => e.textContent))].sort());
-console.log("poisoned: FAIL,", failScore.trim(), "detectors:", detectors.join(","));
+// R25: a known finding leads with its plain-language headline AND shows the small-print ref
+const d1Headline = page.locator(".finding-headline", { hasText: "INJECTED INSTRUCTIONS" }).first();
+if (!(await d1Headline.isVisible())) throw new Error("no visible INJECTED INSTRUCTIONS headline");
+const d1Ref = page.locator(".finding-ref", { hasText: "ref D1" }).first();
+if (!(await d1Ref.isVisible())) throw new Error("no visible 'ref D1' small-print reference");
+// R26: slip header above the verdict
+const slipHeader = page.locator(".slip-header");
+const slipText = await slipHeader.textContent();
+if (!(await slipHeader.isVisible()) || !/Form FRSK-100/.test(slipText) || !/items screened/.test(slipText)) {
+  throw new Error(`slip header wrong/hidden: ${JSON.stringify(slipText)}`);
+}
+// R26: raw CLI report is presented as the official copy
+const rawSummary = (await page.textContent(".raw-report summary")).trim();
+if (!rawSummary.startsWith("OFFICIAL COPY")) throw new Error(`raw-report summary reads ${JSON.stringify(rawSummary)}`);
+const detectors = await page.$$eval(".finding-ref",
+  (els) => [...new Set(els.map((e) => e.textContent.replace(/^ref /, "")))].sort());
+console.log("poisoned: DENIED,", failScore.trim(), "detectors:", detectors.join(","));
 await page.waitForTimeout(900); // let stamp/row animations settle — screenshots show the final state
 await page.screenshot({ path: process.argv[2] + "/playground-poisoned.png", fullPage: true });
 
-// Benign example → PASS, clean
+// Benign example → CLEARED stamp on class .pass (R26), clean note
 await page.click("#load-benign");
 await page.click("#scan-btn");
 await page.waitForSelector(".stamp.pass", { timeout: 15000 });
-const clean = await page.$(".clean-note");
-console.log("benign: PASS, clean-note:", clean ? "present" : "MISSING");
+const passStamp = (await page.textContent(".stamp.pass")).trim();
+if (passStamp !== "CLEARED") throw new Error(`pass stamp reads ${JSON.stringify(passStamp)}, not CLEARED`);
+const clean = page.locator(".clean-note");
+console.log("benign: CLEARED, clean-note:", (await clean.isVisible()) ? "present" : "MISSING");
+if (!(await clean.isVisible())) throw new Error("clean-note not visible on benign scan");
+await page.waitForTimeout(900);
+await page.screenshot({ path: process.argv[2] + "/playground-benign.png", fullPage: true });
+
+// Crafted medium-severity paste → warn verdict → ADDITIONAL SCREENING on class .warn (R26)
+const warnPaste = JSON.stringify({ tools: [{
+  name: "take_notes",
+  description: "Store a note for later retrieval.",
+  inputSchema: { type: "object", properties: {
+    context: { type: "string", description: "Free-form extra context." },
+  } },
+}]});
+await page.fill("#paste-input", warnPaste);
+await page.click("#scan-btn");
+await page.waitForSelector(".stamp.warn", { timeout: 15000 });
+const warnStamp = (await page.textContent(".stamp.warn")).trim();
+if (warnStamp !== "ADDITIONAL SCREENING") {
+  throw new Error(`warn stamp reads ${JSON.stringify(warnStamp)}, not ADDITIONAL SCREENING`);
+}
+console.log("crafted medium: ADDITIONAL SCREENING on .warn");
+
+// R25 fallback: an unrecognized detector code renders as the headline itself — never empty.
+// Drives renderReport directly with a crafted envelope (no detector emits D9).
+await page.evaluate(() => {
+  renderReport({
+    ok: true, exit_code: 2, server_info_known: true,
+    human: "synthetic envelope for the headline-fallback check",
+    report: {
+      items_scanned: 1, frisk_version: "e2e", verdict: "fail", risk_score: 50,
+      highest_severity: "HIGH",
+      findings: [{
+        detector: "D9", severity: "HIGH", item: "tool:x", field: "description",
+        message: "synthetic finding", evidence: { category: "synthetic", snippet: null, offset: null },
+      }],
+    },
+  });
+});
+const d9Headline = page.locator(".finding-headline").first();
+const d9Text = (await d9Headline.textContent()).trim();
+if (!(await d9Headline.isVisible()) || d9Text !== "D9") {
+  throw new Error(`unknown-detector headline fallback broken: ${JSON.stringify(d9Text)}`);
+}
+console.log("unknown detector: raw code shown as headline");
 
 // Malformed paste → loud error banner, report untouched
 await page.fill("#paste-input", "{not json");
 await page.click("#scan-btn");
 await page.waitForSelector("#error-banner:not([hidden])", { timeout: 5000 });
+if (!(await page.locator("#error-banner").isVisible())) throw new Error("error banner not visible");
 console.log("malformed: error banner =", JSON.stringify((await page.textContent("#error-text")).slice(0, 60)));
+await page.screenshot({ path: process.argv[2] + "/playground-malformed.png", fullPage: true });
 
 // XSS probe: hostile tool name/description must render inert (R15 analog)
 const hostile = JSON.stringify({ tools: [{
