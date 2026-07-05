@@ -152,7 +152,7 @@ function renderReport(envelope) {
   // and numbers, still routed through el()/textContent like everything else.
   body.append(el("div", { class: "slip-header" },
     el("span", {}, "Form FRSK-100"),
-    el("span", {}, new Date().toISOString().slice(0, 10)),
+    el("span", {}, new Date().toLocaleDateString("en-CA")), // local date, ISO layout
     el("span", {}, `${report.items_scanned} item${report.items_scanned === 1 ? "" : "s"} screened`)
   ));
 

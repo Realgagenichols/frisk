@@ -118,7 +118,10 @@ const hostile = JSON.stringify({ tools: [{
 }]});
 await page.fill("#paste-input", hostile);
 await page.click("#scan-btn");
-await page.waitForSelector(".stamp", { timeout: 15000 });
+// Wait on a render unique to THIS scan — a bare .stamp would match the previous report
+// still in the DOM and let the probe pass before the hostile content ever renders.
+await page.locator(".finding-where", { hasText: "onerror=" }).first()
+  .waitFor({ timeout: 15000 });
 await page.waitForTimeout(300);
 const pwned = await page.evaluate(() => window.__pwned);
 const imgCount = await page.$$eval("#report-body img, #report-body script", (els) => els.length);
