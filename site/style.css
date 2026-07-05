@@ -1,30 +1,60 @@
 /* frisk playground — "customs inspection dossier" on a dark forensic terminal.
-   Zero-backend rule (R22): no webfont CDNs — the terminal aesthetic owns the monospace
-   stack instead. All color/spacing via custom properties. */
+   Zero-backend rule (R22): fonts are self-hosted same-origin (R27) — no webfont CDNs.
+   All color/spacing via custom properties. */
+
+/* Self-hosted display fonts (R27): latin-subset WOFF2, OFL-licensed (site/fonts/OFL-*.txt).
+   font-display: swap + the system stacks in --sans-signage/--sans-body keep the page fully
+   legible when font files are blocked or missing. */
+@font-face {
+  font-family: "Overpass";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/overpass-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("fonts/public-sans-400-700.woff2") format("woff2");
+}
 
 :root {
-  --ink: #0a0d12;          /* page ground */
-  --panel: #0f141c;        /* panel surface */
-  --panel-deep: #0b0f16;   /* wells inside panels */
-  --line: #202b3b;         /* hairlines */
+  /* Light "inspection notice" palette (R21). Every pair below verified WCAG AA ≥ 4.5:1
+     (scratchpad contrast script; ratios recorded in tasks/todo.md Review). */
+  --paper: #f4f1ea;        /* page ground */
+  --slip: #fdfcf8;         /* report slip / form fields */
+  --ink: #16202e;          /* primary text (ink navy) */
+  --navy: #1b2a44;         /* signage band */
+  --red: #a31f26;          /* government red: DENIED, errors */
+  --green: #1e6b34;        /* stamp green: CLEARED */
+  --dim: #4d5865;          /* secondary text */
+  --faint: #5d6673;        /* small print (still AA at small sizes) */
+
+  /* severity ramp re-derived for the light ground — dark-theme ramp fails AA on paper */
+  --sev-critical: #8f1d23;
+  --sev-high: #a31f26;
+  --sev-medium: #7a4c00;
+  --sev-low: #5c5a10;
+  --sev-info: #0f5c73;
+
+  /* Transitional (removed in todo 2.2): the dark-only tokens below survive verbatim, but
+     --paper/--ink/--dim/--faint/--red/--green/--sev-* above were REPURPOSED in place, so
+     the pre-reskin dark rules render off-palette until 2.2 lands. Do not deploy between. */
+  --panel: #0f141c;
+  --panel-deep: #0b0f16;
+  --line: #202b3b;
   --line-bright: #2e3d54;
-  --paper: #d8dce3;        /* primary text */
-  --dim: #77839a;          /* secondary text */
-  --faint: #4a5468;
-  --amber: #e8a33d;        /* brand + warn */
+  --amber: #e8a33d;
   --amber-hot: #ffc266;
-  --red: #ef5560;
   --red-deep: #ff3d55;
-  --green: #55b46a;
   --cyan: #5fb2c4;
 
-  --sev-critical: #ff3d55;
-  --sev-high: #ef5560;
-  --sev-medium: #e8a33d;
-  --sev-low: #c9b458;
-  --sev-info: #5fb2c4;
-
   --mono: ui-monospace, "SF Mono", Menlo, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  --sans-signage: "Overpass", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --sans-body: "Public Sans", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --courier: "Courier New", Courier, var(--mono);
   --radius: 3px;
 }
 

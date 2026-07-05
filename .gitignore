@@ -9,6 +9,10 @@ build/
 .ruff_cache/
 .pytest_cache/
 .mypy_cache/
+# Node (dev-only: playwright for scripts/e2e_playground.mjs)
+node_modules/
+package.json
+package-lock.json
 # Env / OS
 .env
 .DS_Store
