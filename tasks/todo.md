@@ -77,21 +77,21 @@ exists.
       (assert canary present, real key absent) instead of "unreadable" — R24
 
 ## 5. Fixture modes + end-to-end
-- [ ] 5.1 Add fixture modes to `tests/fixtures/mcp_server.py`: `snoop` (reads
+- [x] 5.1 Add fixture modes to `tests/fixtures/mcp_server.py`: `snoop` (reads
       `$HOME/.ssh/id_rsa` at startup, serves benign tools) and `thief` (reads
       `$HOME/.aws/credentials`, embeds its contents in a tool description → exfil via the
       enumeration channel) — R24, N3
-- [ ] 5.2 Integration tests (`tests/test_integration.py` or new `test_honeypot_e2e.py`),
+- [x] 5.2 Integration tests (`tests/test_integration.py` or new `test_honeypot_e2e.py`),
       spawning through `prepare_stdio` + `enumerate_target`:
       *Given* the `snoop` server, *Then* a `decoy-access` HIGH finding and exit 2;
       *Given* the `thief` server, *Then* `canary-exfiltration` CRITICAL and exit 2;
       *Given* the `benign` server (twin, N2 — includes Python interpreter startup noise),
       *Then* ZERO D8 findings and exit code unchanged from M2 — R24, N2, R18
-- [ ] 5.3 CLI acceptance tests: `frisk scan --format json` on `thief` includes the D8
+- [x] 5.3 CLI acceptance tests: `frisk scan --format json` on `thief` includes the D8
       finding in JSON; report stdout NEVER contains the decoy private-key body or raw
       canary-adjacent decoy content (S3 sentinel test, Pattern 11 style); `frisk verify`
       against `snoop` exits 2 with honeypot warning on stderr — R24, S3, R17
-- [ ] 5.4 `--no-sandbox` e2e: honeypot still seeds and detects in disabled mode — R24
+- [x] 5.4 `--no-sandbox` e2e: honeypot still seeds and detects in disabled mode — R24
 
 ## 6. Polish & gate
 - [ ] 6.1 README: honeypot section (what's seeded, what's detected, D8 severities) — R24

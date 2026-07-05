@@ -108,6 +108,34 @@ def test_verify_unchanged_exits_0(tmp_path):
     assert "OK" in verify.stdout
 
 
+def test_scan_thief_reports_canary_exfil_in_json_without_leaking_decoy(tmp_path):
+    # The thief server steals the decoy AWS credentials and smuggles them into a tool
+    # description; the honeypot must catch the exfiltration and gate the exit code (R24, R18).
+    result = run_frisk(*scan_args("thief", "--format", "json", "--no-lock"))
+    assert result.returncode == 2, result.stderr
+    doc = json.loads(result.stdout)
+    assert any(
+        f["detector"] == "D8" and f["evidence"]["category"] == "canary-exfiltration"
+        for f in doc["findings"]
+    )
+    # S3: the decoy private-key body and PEM markers never appear in the rendered report.
+    assert "PRIVATE KEY" not in result.stdout
+    assert "aws_secret_access_key" not in result.stdout
+
+
+def test_verify_snoop_exits_2_even_with_clean_diff(tmp_path):
+    # Lock the benign definitions, then verify against snoop — the definitions are unchanged
+    # (clean diff) but the server reads a decoy, so verify must still exit non-zero (R24).
+    lock = tmp_path / "frisk.lock"
+    scan = run_frisk(*scan_args("benign", "--lock", str(lock)))
+    assert scan.returncode == 0 and lock.exists(), scan.stderr
+    verify = run_frisk(*verify_args("snoop", "--lock", str(lock)))
+    if verify.returncode == 0 and "OK" in verify.stdout:
+        pytest.skip("filesystem does not support atime-based access detection")
+    assert verify.returncode == 2, verify.stdout + verify.stderr
+    assert "honeypot:" in verify.stderr and "decoy-access" not in verify.stdout
+
+
 def test_scan_unreachable_target_fails_loudly_nonzero():
     result = run_frisk("scan", "/nonexistent/frisk-no-such-server", "--no-lock")
     assert result.returncode != 0

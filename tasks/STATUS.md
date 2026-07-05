@@ -1,12 +1,11 @@
 # STATUS — frisk
 
-**Updated:** 2026-07-04
-**Active milestone:** M3 (Behavioral honeypot, R24) — planned, awaiting plan approval.
-**Last done:** M3 plan written to `tasks/todo.md` (6 sections, ~19 tasks). Design: new
-`frisk/sandbox/honeypot.py` emitting D8 Findings — decoy seeding w/ per-scan canary +
-epoch atime, post-enumeration stat-diff access/tamper detection, canary-in-Inventory
-exfil scan. Honeypot stays out of `frisk/core` (Pyodide purity, R23/N1).
-**In progress:** none.
-**Next action:** user reviews plan → `/implement` starting at task 1.1.
-**Blockers:** none. Open design point resolved in plan: atime unreliability handled via
-capability probe + stderr warning (no silent downgrade).
+**Updated:** 2026-07-05
+**Active milestone:** M3 (Behavioral honeypot, R24) — implementing.
+**Last done:** §1–§4 complete + section-reviewed + fixes applied. Honeypot wired into sandbox
+(seeds every mode) and CLI (scan merges D8 findings; verify gates on HIGH+; atime-degraded
+warning). 204 tests green, ruff clean. §4 review fix: C0-escape verify honeypot stderr line.
+**In progress:** §5 fixture modes + end-to-end.
+**Next action:** task 5.1 — add `snoop` + `thief` fixture modes to
+`tests/fixtures/mcp_server.py`, then 5.2–5.4 e2e/acceptance tests. Then §6 (README + gate).
+**Blockers:** none.
