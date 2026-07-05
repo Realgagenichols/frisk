@@ -9,15 +9,21 @@
 const PYODIDE_VERSION = "0.26.4";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
-const DETECTOR_LABELS = {
-  D1: "instruction-injection",
-  D2: "hidden-content",
-  D3: "sensitive-params",
-  D4: "scope-mismatch",
-  D5: "shadowing",
-  D6: "rug-pull",
-  D7: "metadata-hygiene",
+// Plain-language finding headlines (R25): checkpoint vocabulary only where it is ALSO the
+// literal description of the defect. Internal detector codes survive as small-print refs
+// ("ref Dn") so users can cross-reference `frisk scan` output.
+const HEADLINES = {
+  D1: "INJECTED INSTRUCTIONS",
+  D2: "CONCEALED CONTENT",
+  D3: "SOLICITS SENSITIVE DATA",
+  D4: "UNDECLARED CAPABILITIES",
+  D5: "IMPERSONATES ANOTHER TOOL",
+  D6: "CHANGED SINCE INSPECTION",
+  D7: "UNVERIFIABLE ORIGIN",
 };
+
+// Verdict stamp text (R26). CSS classes stay pass/warn/fail; the raw report is untouched.
+const STAMP_TEXT = { pass: "CLEARED", warn: "ADDITIONAL SCREENING", fail: "DENIED" };
 
 const SEVERITY_VARS = {
   CRITICAL: "var(--sev-critical)",
@@ -142,11 +148,20 @@ function renderReport(envelope) {
     `${report.items_scanned} item${report.items_scanned === 1 ? "" : "s"} · ` +
     `exit ${envelope.exit_code} · frisk ${report.frisk_version}`;
 
+  // Slip header (R26): form number, screening date, item count — all frisk-side constants
+  // and numbers, still routed through el()/textContent like everything else.
+  body.append(el("div", { class: "slip-header" },
+    el("span", {}, "Form FRSK-100"),
+    el("span", {}, new Date().toISOString().slice(0, 10)),
+    el("span", {}, `${report.items_scanned} item${report.items_scanned === 1 ? "" : "s"} screened`)
+  ));
+
   const head = el("div", { class: "verdict-head" },
-    el("span", { class: `stamp ${report.verdict}` }, report.verdict),
+    el("span", { class: `stamp ${report.verdict}` },
+      STAMP_TEXT[report.verdict] || report.verdict),
     el("div", { class: "gauge-block" },
       el("span", { class: "gauge-label" },
-        "risk score ", el("strong", {}, `${report.risk_score} / 100`),
+        "THREAT LEVEL ", el("strong", {}, `${report.risk_score} / 100`),
         report.highest_severity ? ` — highest: ${report.highest_severity}` : ""
       ),
       el("div", { class: "gauge" },
@@ -180,23 +195,27 @@ function renderReport(envelope) {
       list.append(
         el("li", { class: "finding", style: `--sev:${sevVar}; --i:${index}` },
           el("div", { class: "finding-head" },
+            // Headline leads (R25); an unknown detector code falls back to the raw code —
+            // never an empty headline.
+            el("span", { class: "finding-headline" },
+              HEADLINES[finding.detector] || finding.detector || "UNKNOWN DETECTOR"),
             el("span", { class: "sev-chip", style: `--sev:${sevVar}` }, finding.severity),
-            el("span", { class: "detector-tag" }, finding.detector),
-            el("span", { class: "detector-label" },
-              DETECTOR_LABELS[finding.detector] || ""),
             el("span", { class: "finding-where" }, where)
           ),
           el("p", { class: "finding-message" }, finding.message),
-          evidence
+          evidence,
+          el("span", { class: "finding-ref" }, `ref ${finding.detector}`)
         )
       );
     });
     body.append(list);
   }
 
+  // envelope.human is a byte-identical passthrough of the CLI report (R26): appended as a
+  // single text node, no wrapping or trimming.
   body.append(
     el("details", { class: "raw-report" },
-      el("summary", {}, "RAW REPORT — exactly what `frisk scan` prints"),
+      el("summary", {}, "OFFICIAL COPY — exactly what `frisk scan` prints"),
       el("pre", {}, envelope.human)
     )
   );
