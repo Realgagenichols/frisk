@@ -55,13 +55,13 @@ Try the detectors without installing anything:
 **<https://realgagenichols.github.io/frisk/>**
 
 Paste the JSON result of an MCP `tools/list` call (a bare array, a `{"tools": […]}` object,
-or a full JSON-RPC response) and hit **SCAN**. The page runs the *identical* detector core
-as the CLI — the same Python package, executed in your browser via
+or a full JSON-RPC response) and hit **BEGIN SCREENING**. The page runs the *identical*
+detector core as the CLI — the same Python package, executed in your browser via
 [Pyodide](https://pyodide.org) — so the verdict matches `frisk scan`.
 
 - **Privacy:** the site is static. No backend, no analytics, no storage; your definitions
-  and any auth token never leave the browser. The only network request is the pinned
-  Pyodide CDN.
+  and any auth token never leave the browser. The only third-party request is the pinned
+  Pyodide CDN — fonts and detector code are served from the site itself.
 - **Direct connect (best-effort):** for remote streamable-HTTP servers that send CORS
   headers, the page can fetch `tools/resources/prompts` itself (browser → server, optional
   bearer token kept in memory only). Most servers don't allow cross-origin requests —
