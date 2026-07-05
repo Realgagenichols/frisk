@@ -27,9 +27,6 @@
 - **One live server validates one dialect, not the wire format.** connect.js's SSE parser
   passed against FastMCP (LF framing) but would break on sse-starlette's CRLF. Where a spec
   says "CRLF or LF", test both framings — grep the spec for optional/either constructs.
-- **A capability probe must validate its own setup step, not just the end-to-end effect.**
-  `_probe_atime` checked "atime advanced after read" but never checked the pin-to-zero took;
-  on utime-ignoring mounts setup failure masqueraded as capability success (§1 review).
 - **"File missing" has two errnos.** ENOENT (`FileNotFoundError`) and ENOTDIR
   (`NotADirectoryError`) both mean the path is gone; catching only the former let
   parent-dir tampering masquerade as an INFO inspection error (§2 review).
