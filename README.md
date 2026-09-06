@@ -167,6 +167,35 @@ FRISK_AUTH_TOKEN=... frisk scan https://mcp.example.com/mcp
 
 # Re-scan later and diff against the frisk.lock baseline to catch a rug-pull
 frisk verify npx -y @acme/weather-mcp
+
+# Vet every server your client is configured to use, in one pass
+frisk scan --config ~/Library/Application\ Support/Claude/claude_desktop_config.json
+```
+
+### Gating a build on it
+
+A real server produces findings that are correct and permanent — the official
+`@modelcontextprotocol/server-filesystem` genuinely advertises `read_file`, `write_file`,
+`edit_file` and `list_directory`, so D5 genuinely flags four impersonations. Accept them once,
+then fail on anything new:
+
+```bash
+frisk scan --write-baseline frisk-baseline.json npx -y @acme/weather-mcp   # review, commit
+frisk scan --baseline frisk-baseline.json npx -y @acme/weather-mcp         # gate on the rest
+```
+
+The baseline is keyed on `(detector, item, field, evidence category)`, so rewording a
+description does not invalidate it — and a **new** category of finding on an already-accepted
+tool is never suppressed, which is the whole point. Accepted findings are still printed,
+marked as accepted; entries that stop matching anything are flagged as stale.
+
+```yaml
+# .github/workflows/frisk.yml
+- run: uvx --from mcp-frisk frisk scan --format sarif --quiet
+        --baseline frisk-baseline.json npx -y @acme/weather-mcp > frisk.sarif
+  continue-on-error: true
+- uses: github/codeql-action/upload-sarif@v3
+  with: { sarif_file: frisk.sarif }
 ```
 
 ### Options
@@ -177,7 +206,12 @@ a bare `--` if the server genuinely takes a colliding flag.
 
 | flag | applies to | meaning |
 |------|-----------|---------|
-| `--format {human,json}` | `scan` | report format (default `human`) |
+| `--format {human,json,sarif}` | `scan` | report format (default `human`); SARIF feeds GitHub code scanning |
+| `--fail-on {info…critical}` | `scan` | lowest severity that exits `2` (default `high`) — moves the exit code only, nothing is hidden |
+| `--baseline PATH` | `scan` | accepted findings that are reported but do not gate |
+| `--write-baseline PATH` | `scan` | record this scan's findings as accepted, then exit `0` |
+| `--config PATH` | `scan` | scan every server in a client config instead of one target |
+| `--quiet` | both | silence stderr warnings; stdout and the exit code are unchanged |
 | `--no-lock` | `scan` | do not write a `frisk.lock` baseline |
 | `--lock PATH` | both | lockfile path (default `./frisk.lock`) |
 | `--no-sandbox` | both | disable the seatbelt layer (other layers still apply) |

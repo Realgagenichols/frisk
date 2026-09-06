@@ -1,0 +1,24 @@
+version: 2
+
+# Actions are pinned to commit SHAs, which is the right posture for a supply-chain tool but
+# means nothing updates on its own. Dependabot is the other half of that trade: pinning
+# without a bump channel is how a project ends up on a two-year-old action with a known CVE.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "deps"
+    # `mcp` is the only runtime dependency and it has broken frisk once already (1.28 renamed
+    # streamablehttp_client). Major bumps get read by a human, not merged by a bot.
+    ignore:
+      - dependency-name: mcp
+        update-types: ["version-update:semver-major"]
