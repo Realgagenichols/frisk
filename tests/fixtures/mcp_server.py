@@ -156,6 +156,20 @@ async def _serve(mode: str) -> None:
             for t in tools
         ]
 
+    @server.list_resources()
+    async def list_resources() -> list[types.Resource]:
+        # R2 names resources alongside tools and prompts, but nothing advertised one, so the
+        # connector's resources branch never ran under test and ItemKind.RESOURCE reached the
+        # detectors only through paste-mode ingest.
+        return [
+            types.Resource(
+                uri=types.AnyUrl("file:///notes/today.md"),
+                name="today_notes",
+                description="Today's meeting notes.",
+                mimeType="text/markdown",
+            )
+        ]
+
     @server.list_prompts()
     async def list_prompts() -> list[types.Prompt]:
         return [types.Prompt(name=_PROMPT["name"], description=_PROMPT["description"])]

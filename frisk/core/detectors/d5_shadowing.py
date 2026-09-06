@@ -78,7 +78,7 @@ _COMMON_TOOL_TOKEN_RUNS = [
 ]
 
 
-def _steering_field(field_path: str) -> bool:
+def _steering_field(field_path: str, text: str) -> bool:
     """Model-visible prose, minus `_meta`.
 
     `_meta` is host metadata, and hosts put UI copy there: the Apps SDK's
@@ -87,7 +87,7 @@ def _steering_field(field_path: str) -> bool:
     Narrowed for D5 only — D1 and D2 still read `_meta`, because an injected instruction or a
     zero-width payload is dangerous there whoever the copy was written for.
     """
-    return model_visible_text(field_path) and not field_path.startswith("_meta")
+    return model_visible_text(field_path, text) and not field_path.startswith("_meta")
 
 
 def _impersonates(name: str) -> bool:

@@ -1,6 +1,8 @@
 """End-to-end integration through the internal API (R1-R18 pipeline) + determinism (N1)."""
 
+import json
 import os
+import subprocess
 import sys
 
 from frisk.connector import StdioTarget, enumerate_target
@@ -51,11 +53,46 @@ def test_scan_then_verify_catches_mutation(tmp_path):
 
 
 def test_detectors_are_deterministic(tmp_path):
-    # N1: no network/LLM/randomness — identical inventory → identical findings, run to run.
+    """N1: no network, no LLM, no randomness — same inventory, same findings, every run.
+
+    Calling `run_detectors` twice in one process on one object cannot catch the realistic
+    failure, which is set iteration order changing under a different PYTHONHASHSEED. So the
+    second pass runs in a SUBPROCESS with a different seed, and the two outputs must match.
+    """
     inventory, _, _ = _scan("poisoned", tmp_path)
-    run_a = run_detectors(inventory, ALL_DETECTORS)
-    run_b = run_detectors(inventory, ALL_DETECTORS)
     key = lambda fs: [  # noqa: E731
-        (f.detector, f.severity, f.item_ref, f.field, f.evidence.span) for f in fs
+        (f.detector, str(f.severity), f.item_ref, f.field, list(f.evidence.span or ()))
+        for f in fs
     ]
-    assert key(run_a) == key(run_b)
+    local = key(run_detectors(inventory, ALL_DETECTORS))
+    assert local, "vacuity guard: the poisoned fixture produced no findings"
+
+    script = (
+        "import json,sys;"
+        "from frisk.core.ingest import inventory_from_json;"
+        "from frisk.core.engine import run_detectors;"
+        "inv=inventory_from_json(sys.stdin.read());"
+        "print(json.dumps([[f.detector,str(f.severity),f.item_ref,f.field,"
+        "list(f.evidence.span or ())] for f in run_detectors(inv)]))"
+    )
+    payload = json.dumps(
+        {
+            "tools": [json.loads(i.raw_bytes) for i in inventory.items if i.kind == "tool"],
+            "serverInfo": {
+                k: v for k, v in inventory.server_info.items() if k in ("name", "version")
+            },
+        }
+    )
+    outputs = set()
+    for seed in ("0", "12345"):
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            input=payload,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONHASHSEED": seed, "PYTHONPATH": str(REPO_ROOT)},
+            cwd=str(REPO_ROOT),
+        )
+        assert completed.returncode == 0, completed.stderr
+        outputs.add(completed.stdout.strip())
+    assert len(outputs) == 1, "findings differ under a different PYTHONHASHSEED"

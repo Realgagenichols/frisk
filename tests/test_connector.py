@@ -11,7 +11,7 @@ from frisk.connector import (
     StdioTarget,
     enumerate_target,
 )
-from frisk.core.models import ItemKind
+from frisk.core.models import ItemKind, iter_string_leaves
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,12 +28,25 @@ def fixture_target(mode: str, **kw) -> StdioTarget:
 
 
 def test_stdio_handshake_and_enumeration_counts():
-    # R1 handshake + R2 scenario: 3 tools + 1 prompt → 4-item inventory.
+    # R1 handshake + R2: "enumerate tools, RESOURCES, and prompts". The fixture advertises
+    # 3 tools + 1 resource + 1 prompt; the resources branch of the connector had no coverage
+    # at all until the fixture served one, so ItemKind.RESOURCE only ever arrived via paste.
     inv = enumerate_target(fixture_target("simple"))
-    assert len(inv.items) == 4
     kinds = [i.kind for i in inv.items]
     assert kinds.count(ItemKind.TOOL) == 3
+    assert kinds.count(ItemKind.RESOURCE) == 1
     assert kinds.count(ItemKind.PROMPT) == 1
+    assert len(inv.items) == 5
+
+
+def test_enumerated_resource_carries_its_uri_and_mimetype():
+    # R5 for resources: the fields a detector needs must survive the connector's model_dump.
+    inv = enumerate_target(fixture_target("simple"))
+    resource = next(i for i in inv.items if i.kind is ItemKind.RESOURCE)
+    assert resource.name == "today_notes"
+    assert resource.payload.get("uri", "").startswith("file:///notes/")
+    assert resource.payload.get("mimeType") == "text/markdown"
+    assert dict(iter_string_leaves(resource)).get("uri", "").startswith("file:///notes/")
 
 
 def test_inventory_captures_name_description_schema_and_raw_bytes():
@@ -62,8 +75,10 @@ def test_handshake_exit_fails_loudly_not_clean():
         enumerate_target(fixture_target("exit-handshake"))
     msg = str(excinfo.value)
     assert "stdio:" in msg  # names the target
-    # Fail-loud, not "0 findings": the error is specific, not a silent empty result.
-    assert msg  # non-empty, actionable
+    # Fail-loud, not "0 findings": the message must name the PHASE and a concrete cause, not
+    # merely be non-empty — `assert msg` passed for any string at all.
+    assert "could not enumerate" in msg or "handshake failed" in msg
+    assert msg.rstrip().endswith(("Error", "Exception", "Group")), msg  # a cause type, named
 
 
 def test_nonexistent_command_fails_loudly():
