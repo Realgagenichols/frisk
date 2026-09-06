@@ -184,3 +184,69 @@ def test_verify_unchanged_twins_is_not_drift(tmp_path):
     verified = run_frisk(*verify_args("twins", "--lock", str(lock)))
     assert verified.returncode == 0, verified.stdout + verified.stderr
     assert "OK" in verified.stdout
+
+
+def test_frisk_flag_after_the_target_is_refused_not_swallowed(tmp_path):
+    """argparse.REMAINDER hands everything after the target to the child, so
+    `frisk scan srv --format json` used to emit a HUMAN report with exit 0/2 and no
+    complaint — a CI job parsing that JSON gets prose instead of an error."""
+    result = run_frisk(
+        "scan",
+        sys.executable,
+        "-m",
+        "tests.fixtures.mcp_server",
+        "--mode",
+        "benign",
+        "--format",
+        "json",
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "came after the target" in result.stderr
+    assert "--format" in result.stderr
+    assert not result.stdout.strip().startswith("{")
+
+
+def test_server_args_that_are_not_frisk_flags_still_pass_through(tmp_path):
+    # P21: the guard must reject OUR flags only — `--mode` belongs to the fixture server and
+    # every other test here depends on it reaching the child.
+    result = run_frisk(*scan_args("benign", "--lock", str(tmp_path / "frisk.lock")))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_unexpected_failure_exits_2_not_1(tmp_path, monkeypatch):
+    """Exit 1 means "warnings" in the R18 contract, and an uncaught exception exits 1 —
+    so a crash would read to CI as a soft pass."""
+    from frisk import cli
+
+    monkeypatch.setattr(cli, "_cmd_scan", lambda args: 1 / 0)
+    code = cli.main(["scan", "/bin/true"])
+    assert code == 2
+
+
+def test_plaintext_http_with_a_token_warns(monkeypatch, capsys):
+    from frisk import cli
+
+    monkeypatch.setenv("FRISK_AUTH_TOKEN", "s3cr3t")
+    parser = cli.build_parser()
+    args = parser.parse_args(["scan", "http://insecure.example.com/mcp"])
+    cli._build_target(args)
+    err = capsys.readouterr().err
+    assert "plaintext http://" in err
+    assert "s3cr3t" not in err  # the warning names the env var, never the value (S3)
+
+
+def test_double_dash_lets_a_colliding_flag_reach_the_server(tmp_path):
+    result = run_frisk(
+        "scan",
+        "--lock",
+        str(tmp_path / "frisk.lock"),
+        sys.executable,
+        "-m",
+        "tests.fixtures.mcp_server",
+        "--mode",
+        "benign",
+        "--",
+        "--timeout",
+        "ignored-by-the-fixture",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 
-from frisk.core.detectors.base import fold_name
+from frisk.core.detectors.base import fold_name, iter_schema_properties
 from frisk.core.models import Finding, Inventory, Item, Severity
 from frisk.core.sanitize import make_evidence
 
@@ -87,12 +87,9 @@ class ScopeMismatch:
                 )
             )
 
-        # Signal 1: capability param without a declared matching purpose (MEDIUM).
-        props = (item.input_schema or {}).get("properties")
-        if not isinstance(props, dict):
-            return findings
-        for prop_name, spec in props.items():
-            spec = spec if isinstance(spec, dict) else {}
+        # Signal 1: capability param without a declared matching purpose (MEDIUM). Walks
+        # nested properties too — burying a `command` under `options` is not a declaration.
+        for prop_path, prop_name, spec in iter_schema_properties(item.input_schema or {}):
             prop_desc = spec.get("description", "")
             prop_desc = prop_desc if isinstance(prop_desc, str) else ""
             for cap in _CAPABILITIES:
@@ -105,7 +102,7 @@ class ScopeMismatch:
                             detector=self.id,
                             severity=Severity.MEDIUM,
                             item_ref=item.ref,
-                            field=f"inputSchema.properties.{prop_name}#key",
+                            field=f"{prop_path}#key",
                             message=(
                                 f'tool requests {cap.name} capability via "{prop_name}" but its '
                                 f"stated purpose never mentions {cap.name}"

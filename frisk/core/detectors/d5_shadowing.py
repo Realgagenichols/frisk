@@ -21,7 +21,14 @@ from __future__ import annotations
 import re
 from collections import Counter
 
-from frisk.core.detectors.base import Rule, fold_name, model_visible_text, scan_item_leaves
+from frisk.core.detectors.base import (
+    Rule,
+    contains_token_run,
+    fold_name,
+    model_visible_text,
+    name_tokens,
+    scan_item_leaves,
+)
 from frisk.core.models import Evidence, Finding, Inventory, Severity
 from frisk.core.sanitize import make_evidence
 
@@ -48,11 +55,33 @@ _COMMON_TOOL_NAMES = {
     "browser",
     "execute_command",
     "run_command",
+    "grep",
+    "glob",
+    "view",
+    "edit",
+    "apply_patch",
+    "web_fetch",
+    "task",
+    "python",
+    "shell",
 }
 
-# Compared against fold_name(item.name), so `readFile` and `read-file` collide with
-# `read_file` the way a reader of the tool list would expect them to.
+# Two match modes, because impersonation is not always an exact name:
+#   - folded equality catches `readFile`, `read-file`, `READFILE`;
+#   - token-run containment catches `filesystem_read_file`, `read_file_v2`, `fs.read_file`,
+#     without the false positives a substring test would produce (`thread_file`).
 _COMMON_TOOL_NAMES_FOLDED = {fold_name(n) for n in _COMMON_TOOL_NAMES}
+# Only multi-token names are matched by containment: a one-token name like `fetch` or `task`
+# is too common a word to flag wherever it appears inside a longer name (N2).
+_COMMON_TOOL_TOKEN_RUNS = [
+    tokens for n in _COMMON_TOOL_NAMES if len(tokens := [t.lower() for t in name_tokens(n)]) > 1
+]
+
+
+def _impersonates(name: str) -> bool:
+    if fold_name(name) in _COMMON_TOOL_NAMES_FOLDED:
+        return True
+    return any(contains_token_run(name, run) for run in _COMMON_TOOL_TOKEN_RUNS)
 
 _STEERING_RULES = [
     Rule(
@@ -89,7 +118,7 @@ class Shadowing:
     def run(self, inventory: Inventory) -> list[Finding]:
         findings: list[Finding] = self._duplicate_names(inventory)
         for item in inventory.items:
-            if fold_name(item.name) in _COMMON_TOOL_NAMES_FOLDED:
+            if _impersonates(item.name):
                 findings.append(
                     Finding(
                         detector=self.id,
@@ -119,12 +148,20 @@ class Shadowing:
         the server's own inventory. Emitted WITHOUT a span so the engine's overlap
         suppression can never hide it behind another finding on the same name.
         """
-        counts = Counter(item.ref for item in inventory.items)
+        # Folded, like every other name comparison here: `search`/`Search` and
+        # `read_notes`/`readNotes` collide for a client resolving by name, so counting raw
+        # refs would let a twin hide behind a capitalisation.
+        counts: Counter[str] = Counter()
+        display: dict[str, str] = {}
+        for item in inventory.items:
+            key = f"{item.kind}:{fold_name(item.name)}"
+            counts[key] += 1
+            display.setdefault(key, item.ref)
         return [
             Finding(
                 detector=self.id,
                 severity=Severity.MEDIUM,
-                item_ref=ref,
+                item_ref=display[key],
                 field="name",
                 message=(
                     f"{count} definitions advertised under the same name — which one a "
@@ -132,6 +169,6 @@ class Shadowing:
                 ),
                 evidence=Evidence(category="duplicate-definition-name"),
             )
-            for ref, count in sorted(counts.items())
+            for key, count in sorted(counts.items())
             if count > 1
         ]

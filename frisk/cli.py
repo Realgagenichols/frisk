@@ -63,10 +63,65 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+class UsageError(Exception):
+    """The command line is not what the user meant. Loud, with the fix in the message."""
+
+
+def _known_option_strings(parser: argparse.ArgumentParser) -> set[str]:
+    """Every option string frisk itself defines, subcommands included.
+
+    Derived from the parser rather than listed, so adding a flag cannot leave the check
+    behind (Pattern 26). The top-level parser only owns ``-h``; the real flags live on the
+    subparsers, which hang off the subparsers action's ``choices``.
+    """
+    options: set[str] = set()
+    stack = [parser]
+    while stack:
+        current = stack.pop()
+        for action in current._actions:  # noqa: SLF001 — argparse exposes no public accessor
+            options.update(action.option_strings)
+            choices = getattr(action, "choices", None)
+            if isinstance(choices, dict):
+                stack.extend(
+                    p for p in choices.values() if isinstance(p, argparse.ArgumentParser)
+                )
+    return options
+
+
+def _reject_swallowed_options(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Refuse frisk's own flags when they appear AFTER the target (R6 applied to argv).
+
+    `args.args` is `argparse.REMAINDER`, so everything after the target goes to the child.
+    That is what lets `frisk scan npx -y pkg --verbose` work, but it also meant
+    `frisk scan srv --format json` silently produced a HUMAN report: a CI job parsing that
+    output gets prose and no error. Anything that looks like one of ours is a mistake worth
+    stopping for.
+
+    `--` is the escape hatch, with the usual meaning: everything after it is the child's,
+    even if it collides with a frisk flag.
+    """
+    passthrough = args.args.index("--") if "--" in args.args else len(args.args)
+    ours = _known_option_strings(parser)
+    for stray in (a for a in args.args[:passthrough] if a.split("=", 1)[0] in ours):
+        raise UsageError(
+            f"{stray!r} came after the target, so it went to the server instead of frisk. "
+            f"frisk's own options go BEFORE the target: "
+            f"frisk {args.command} {stray} … <target> [server args]. "
+            f"If {stray!r} really is meant for the server, put it after a bare --."
+        )
+
+
 def _build_target(args: argparse.Namespace) -> Target:
     target = args.target
     if target.startswith(("http://", "https://")):
         token = os.environ.get(args.auth_env) if args.auth_env else None
+        if token and target.startswith("http://"):
+            print(
+                f"warning: sending the {args.auth_env} bearer token over plaintext http:// — "
+                "it is readable by anything on the path. Use https:// unless this is a "
+                "loopback address you control.",
+                file=sys.stderr,
+            )
         return RemoteTarget(url=target, auth_token=token, transport=args.transport)
     # stdio: env is intentionally empty — the sandbox layers a benign allowlist on top and
     # forces a fake HOME, so the untrusted server never inherits frisk's own secrets (S3).
@@ -161,15 +216,23 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     try:
+        _reject_swallowed_options(parser, args)
         if args.command == "scan":
             return _cmd_scan(args)
         return _cmd_verify(args)
-    except ConnectorError as exc:
+    except (ConnectorError, LockError, UsageError) as exc:
         # Fail loud, never "clean": a specific, actionable error and a non-zero exit (R6).
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_OPERATIONAL_ERROR
-    except LockError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 — last line of the CI contract, see below
+        # An uncaught exception would exit 1, and 1 is the code for "warnings" (R18) — a
+        # crash would read to CI as a soft pass. Only the exception TYPE is printed: the
+        # traceback can carry target bytes (Pattern 11).
+        print(
+            f"error: frisk failed unexpectedly ({type(exc).__name__}) — the target was NOT "
+            "assessed; treat this as a failed scan, not a clean one",
+            file=sys.stderr,
+        )
         return EXIT_OPERATIONAL_ERROR
 
 

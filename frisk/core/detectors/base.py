@@ -10,6 +10,61 @@ from frisk.core.models import Finding, Item, Severity, iter_string_leaves
 from frisk.core.sanitize import make_evidence
 
 
+def iter_schema_properties(
+    schema: object, path: str = "inputSchema", _depth: int = 0
+) -> Iterator[tuple[str, str, dict]]:
+    """Yield ``(field_path, property_name, spec)`` for every property at ANY depth.
+
+    The structural rules (D3, D4) read property names positionally rather than by running
+    word patterns over all leaves, which is what keeps schema keywords out of them. That
+    positional read used to stop at the top level, so nesting a `api_key` or
+    `full_conversation` under `options: {type: object, properties: {…}}` hid it completely.
+    Recurses through `properties`, `items`, and the `allOf`/`anyOf`/`oneOf` branches.
+    """
+    if _depth > _MAX_SCHEMA_DEPTH or not isinstance(schema, dict):
+        return
+    props = schema.get("properties")
+    if isinstance(props, dict):
+        for name, raw in props.items():
+            spec = raw if isinstance(raw, dict) else {}
+            child = f"{path}.properties.{name}"
+            yield (child, name, spec)
+            yield from iter_schema_properties(spec, child, _depth + 1)
+    items = schema.get("items")
+    if isinstance(items, dict):
+        yield from iter_schema_properties(items, f"{path}.items", _depth + 1)
+    for keyword in ("allOf", "anyOf", "oneOf"):
+        branch = schema.get(keyword)
+        if isinstance(branch, list):
+            for index, sub in enumerate(branch):
+                yield from iter_schema_properties(sub, f"{path}.{keyword}[{index}]", _depth + 1)
+
+
+# A server chooses how deeply to nest its schema; stop descending rather than let a hostile
+# depth turn into a RecursionError that only surfaces as a detector-error finding.
+_MAX_SCHEMA_DEPTH = 24
+
+
+def name_tokens(name: str) -> list[str]:
+    """Split an identifier into lowercase words across separators and camelCase humps.
+
+    Used for CONTAINMENT checks, where folding to a single string is unsafe: `read_file`
+    folds to `readfile`, which is a substring of `thread_file` — a false positive that
+    token-level matching cannot produce.
+    """
+    return [t for t in re.split(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])", name) if t]
+
+
+def contains_token_run(name: str, run: list[str]) -> bool:
+    """True when ``run`` appears as a contiguous token sequence inside ``name``.
+
+    So `filesystem_read_file`, `read_file_v2` and `fs.read_file` all match `read_file`,
+    while `thread_file` and `spreadsheet_file` do not.
+    """
+    tokens = [t.lower() for t in name_tokens(name)]
+    return any(tokens[i : i + len(run)] == run for i in range(len(tokens) - len(run) + 1))
+
+
 def fold_name(name: str) -> str:
     """Fold an identifier to letters+digits so separator and case style can't hide a match.
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from frisk.core.detectors.base import iter_schema_properties
 from frisk.core.models import Finding, Inventory, Item, Severity
 from frisk.core.sanitize import make_evidence
 
@@ -24,9 +25,19 @@ _I = re.IGNORECASE
 _NAME_RULES: list[tuple[str, re.Pattern[str]]] = [
     (
         "conversation-history",
+        # Still `fullmatch`ed, which is what keeps `conversation_id` clean (Pattern 2).
+        # Stems split into two tiers: `conversation`/`transcript` are specific enough alone,
+        # while `messages`, `history`, `memory` and `chat` are ordinary parameter names on
+        # honest tools and only count when a scope qualifier makes them total
+        # (`all_messages`, `full_history`). W3b fixed exactly that false positive once — do
+        # not re-widen it.
         re.compile(
-            r"(?:full_?|entire_?)?conversation(?:_?history)?"
-            r"|chat_?(?:history|log)|message_?history|dialog(?:ue)?_?history",
+            r"(?:full|entire|all|prior|previous|complete)_?"
+            r"(?:conversation|chat|dialog(?:ue)?|message|transcript|history|memory|context)s?"
+            r"(?:_?(?:history|log))?"
+            r"|(?:conversation|transcript)s?(?:_?(?:history|log))?"
+            r"|(?:chat|message|dialog(?:ue)?)_?(?:history|log)"
+            r"|context_?window|system_?prompt",
             _I,
         ),
     ),
@@ -46,7 +57,19 @@ _CREDENTIAL_SEGMENTS = {
     "credential",
     "credentials",
     "auth",
+    "cookie",
+    "cookies",
+    "bearer",
+    "keyfile",
+    "keypair",
+    "passphrase",
+    "pat",
 }
+
+# Bare "key" cannot go in the segment set — `sort_key`, `cache_key`, `primary_key`, `api_key`
+# already covered — so the key-shaped names are matched as a QUALIFIER + key pair instead.
+_KEY_QUALIFIERS = {"private", "ssh", "signing", "secret", "session", "encryption", "identity"}
+_KEY_NOUNS = {"key", "keys", "file"}  # `identity_file`/`secret_file` are key paths by another name
 
 # Matched against property descriptions.
 _DESC_RULES: list[tuple[str, re.Pattern[str]]] = [
@@ -77,14 +100,8 @@ class SensitiveParams:
         return findings
 
     def _scan_item(self, item: Item) -> list[Finding]:
-        schema = item.input_schema or {}
-        props = schema.get("properties")
-        if not isinstance(props, dict):
-            return []
         findings: list[Finding] = []
-        for name, spec in props.items():
-            spec = spec if isinstance(spec, dict) else {}
-            path = f"inputSchema.properties.{name}"
+        for path, name, spec in iter_schema_properties(item.input_schema or {}):
             # Enum/const-bounded values can't capture free-form sensitive data — the same
             # bounding logic the catch-all rule applies (Pattern 3).
             if "enum" not in spec and "const" not in spec:
@@ -112,7 +129,12 @@ class SensitiveParams:
                 message = f'property "{name}" solicits {category}'
                 findings.append(self._finding(item, f"{path}#key", name, category, message))
         segments = {seg.lower() for seg in normalized.split("_")}
-        if segments & _CREDENTIAL_SEGMENTS or "apikey" in name.lower().replace("_", ""):
+        qualified_key = bool(segments & _KEY_NOUNS) and bool(segments & _KEY_QUALIFIERS)
+        if (
+            segments & _CREDENTIAL_SEGMENTS
+            or qualified_key
+            or "apikey" in name.lower().replace("_", "")
+        ):
             findings.append(
                 self._finding(
                     item,
