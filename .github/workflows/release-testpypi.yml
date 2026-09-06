@@ -1,0 +1,51 @@
+name: Publish to TestPyPI
+
+# A dry run of release.yml against TestPyPI, which is a SEPARATE index with a separate
+# account and its own trusted publisher. Triggered by hand (Actions → this workflow → Run
+# workflow) rather than by a tag, so rehearsing a release never burns a real version tag.
+#
+# One-time setup on test.pypi.org (a different login from pypi.org — register there if you
+# have not). Your account → Publishing → Add a pending publisher:
+#   PyPI project:  mcp-frisk
+#   Owner:         Realgagenichols
+#   Repository:    frisk
+#   Workflow:      release-testpypi.yml
+#   Environment:   testpypi
+#
+# Note the workflow filename and environment differ from the real release, so the two
+# publishers cannot be confused for one another.
+#
+# TestPyPI burns version numbers exactly like PyPI does: once 0.1.0 is uploaded there it
+# cannot be replaced. That is independent of pypi.org, so a spent 0.1.0 on TestPyPI leaves
+# 0.1.0 on the real index untouched — re-rehearse with a bumped version if you need to.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/mcp-frisk
+    permissions:
+      id-token: write # required for Trusted Publishing
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
