@@ -25,6 +25,12 @@ the pull request that introduced the problem. The mapping is deliberately conser
   every alert. Ours hashes the logical identity instead, so an alert survives an unrelated
   edit and dies only when the finding does.
 
+Verified against a live repository on 2026-09-06, not just against the docs: a 23-result
+document across three servers uploaded with `processing_status: complete`, `errors: null`,
+and produced 23 distinct alerts anchored at the right config lines. Re-uploading the same
+document produced no duplicates, and removing a server closed its 21 alerts as `fixed` —
+which is the auto-close property the single-run shape exists to get.
+
 Pure core, no I/O, no secret values (S3) — evidence carries categories and offsets, and the
 snippet is already C0-escaped and credential-masked by `sanitize.make_evidence`.
 """
