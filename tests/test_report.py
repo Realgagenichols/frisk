@@ -63,6 +63,9 @@ def test_json_report_schema_stable_and_parseable():
         "highest_severity",
         "items_scanned",
         "server_info",
+        "fail_on",
+        "accepted",
+        "stale_baseline_entries",
         "findings",
     }
     f = doc["findings"][0]

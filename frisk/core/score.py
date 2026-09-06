@@ -50,6 +50,32 @@ def assess(findings: list[Finding]) -> Assessment:
     return Assessment(score=score, verdict=verdict, highest=highest)
 
 
-def exit_code(assessment: Assessment) -> int:
-    """CI gate (R18): 0 clean, 1 warnings (LOW/MEDIUM), 2 HIGH/CRITICAL."""
-    return {"pass": 0, "warn": 1, "fail": 2}[assessment.verdict]
+DEFAULT_FAIL_ON = Severity.HIGH
+
+
+def exit_code(assessment: Assessment, fail_on: Severity = DEFAULT_FAIL_ON) -> int:
+    """CI gate (R18, R32): 0 clean, 1 findings below the threshold, 2 at or above it.
+
+    ``fail_on`` moves only the line between 1 and 2 — nothing is hidden from the report by
+    raising it, and nothing new is detected by lowering it. The default is HIGH, which is the
+    original contract exactly.
+
+    The accumulated-score rule (R13) is expressed as a promotion of the effective severity
+    rather than a separate branch: a saturated pile of MEDIUMs is a HIGH-equivalent, so it
+    fails at the default and still does not fail under ``--fail-on critical``, which is what
+    someone asking only to be woken for CRITICALs meant.
+    """
+    if assessment.highest is None or assessment.highest is Severity.INFO:
+        return 0
+    effective = assessment.highest
+    if assessment.verdict == "fail" and effective < Severity.HIGH:
+        effective = Severity.HIGH
+    return 2 if effective >= fail_on else 1
+
+
+def parse_fail_on(name: str) -> Severity:
+    """Map a `--fail-on` argument to a Severity. Raises ValueError on an unknown name."""
+    try:
+        return Severity[name.strip().upper()]
+    except KeyError:
+        raise ValueError(f"unknown severity {name!r}") from None

@@ -323,3 +323,70 @@ def test_reported_version_matches_installed_metadata():
 
     result = run_frisk(*scan_args("benign", "--format", "json", "--no-lock"))
     assert json.loads(result.stdout)["frisk_version"] == version("mcp-frisk")
+
+
+# ── R32/R33/R35: the flags that decide whether a CI gate survives ───────────
+
+
+def test_fail_on_moves_the_exit_code_without_hiding_findings(tmp_path):
+    poisoned = run_frisk(*scan_args("poisoned", "--no-lock", "--fail-on", "critical"))
+    default = run_frisk(*scan_args("poisoned", "--no-lock"))
+    assert default.returncode == 2
+    assert poisoned.returncode == 1, "HIGH findings should not fail a critical-only gate"
+    # Same findings in both reports — the threshold is an exit-code decision, not a filter.
+    assert poisoned.stdout.count("[HIGH]") == default.stdout.count("[HIGH]") > 0
+    assert "failing at CRITICAL and above" in poisoned.stdout
+
+
+def test_baseline_round_trip_accepts_and_still_reports(tmp_path):
+    baseline = tmp_path / "frisk-baseline.json"
+    written = run_frisk(*scan_args("poisoned", "--no-lock", "--write-baseline", str(baseline)))
+    assert written.returncode == 0, written.stderr
+    assert baseline.exists() and "wrote baseline" in written.stderr
+
+    rescan = run_frisk(*scan_args("poisoned", "--no-lock", "--baseline", str(baseline)))
+    assert rescan.returncode == 0, rescan.stdout + rescan.stderr
+    assert "PASS" in rescan.stdout
+    # Reported, not hidden — a report that omitted them would misdescribe the server.
+    assert "accepted via baseline" in rescan.stdout
+    assert "D1" in rescan.stdout
+
+
+def test_baseline_does_not_suppress_a_newly_poisoned_server(tmp_path):
+    """The property that makes a baseline safe: accepting today's findings must not accept
+    tomorrow's. Baseline is taken from the benign server, then the server turns malicious."""
+    baseline = tmp_path / "frisk-baseline.json"
+    run_frisk(*scan_args("benign", "--no-lock", "--write-baseline", str(baseline)))
+    rescan = run_frisk(*scan_args("relocated", "--no-lock", "--baseline", str(baseline)))
+    assert rescan.returncode == 2, rescan.stdout + rescan.stderr
+    assert "FAIL" in rescan.stdout
+
+
+def test_stale_baseline_entries_are_surfaced(tmp_path):
+    baseline = tmp_path / "frisk-baseline.json"
+    run_frisk(*scan_args("poisoned", "--no-lock", "--write-baseline", str(baseline)))
+    # The same baseline against a server that no longer has those findings.
+    rescan = run_frisk(*scan_args("benign", "--no-lock", "--baseline", str(baseline)))
+    assert "stale baseline entries" in rescan.stdout
+    assert rescan.returncode == 0
+
+
+def test_unreadable_baseline_fails_loudly_rather_than_gating_on_nothing(tmp_path):
+    result = run_frisk(*scan_args("poisoned", "--no-lock", "--baseline", str(tmp_path / "nope")))
+    assert result.returncode == 2
+    assert "cannot read baseline" in result.stderr
+
+
+def test_quiet_silences_stderr_but_not_the_report_or_the_exit_code(tmp_path):
+    loud = run_frisk(*scan_args("poisoned", "--no-lock"))
+    quiet = run_frisk(*scan_args("poisoned", "--no-lock", "--quiet"))
+    assert quiet.returncode == loud.returncode == 2
+    assert quiet.stdout == loud.stdout
+    assert "warning:" not in quiet.stderr
+
+
+def test_json_with_quiet_is_pipeable(tmp_path):
+    result = run_frisk(*scan_args("poisoned", "--format", "json", "--no-lock", "--quiet"))
+    doc = json.loads(result.stdout)  # nothing but JSON on stdout
+    assert doc["fail_on"] == "high"
+    assert result.stderr == ""

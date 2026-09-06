@@ -5,15 +5,24 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from frisk import __version__
 from frisk.connector import ConnectorError, RemoteTarget, StdioTarget, Target, enumerate_target
+from frisk.core.baseline import (
+    Baseline,
+    BaselineError,
+    apply_baseline,
+    finding_key,
+    load_baseline,
+    render_baseline,
+)
 from frisk.core.detectors import ALL_DETECTORS
 from frisk.core.engine import run_detectors
 from frisk.core.models import Finding, Inventory, Severity
 from frisk.core.report import render_human, render_json
 from frisk.core.sanitize import c0_escape
-from frisk.core.score import Assessment, assess, exit_code
+from frisk.core.score import Assessment, assess, exit_code, parse_fail_on
 from frisk.lockfile import LockError, diff_lock, read_lock, render_diff, write_lock
 from frisk.sandbox import SandboxOptions, inspect_decoys, prepare_stdio, scan_for_canary
 
@@ -58,9 +67,34 @@ def build_parser() -> argparse.ArgumentParser:
             "--lock", default=DEFAULT_LOCK, help=f"lockfile path (default: {DEFAULT_LOCK})"
         )
 
+        p.add_argument(
+            "--quiet",
+            action="store_true",
+            help="suppress warnings on stderr; the report and exit code are unchanged",
+        )
+
     scan = sub.choices["scan"]
     scan.add_argument("--format", choices=["human", "json"], default="human")
     scan.add_argument("--no-lock", action="store_true", help="do not write a frisk.lock")
+    scan.add_argument(
+        "--fail-on",
+        choices=["info", "low", "medium", "high", "critical"],
+        default="high",
+        help=(
+            "lowest severity that exits 2 (default: high). Moves the exit code only — "
+            "every finding is still reported"
+        ),
+    )
+    scan.add_argument(
+        "--baseline",
+        metavar="PATH",
+        help="accepted-finding baseline; matching findings are reported but do not gate",
+    )
+    scan.add_argument(
+        "--write-baseline",
+        metavar="PATH",
+        help="record this scan's findings as an accepted baseline, then exit 0",
+    )
 
     return parser
 
@@ -118,17 +152,27 @@ def _build_target(args: argparse.Namespace) -> Target:
     if target.startswith(("http://", "https://")):
         token = os.environ.get(args.auth_env) if args.auth_env else None
         if token and target.startswith("http://"):
-            print(
-                f"warning: sending the {args.auth_env} bearer token over plaintext http:// — "
-                "it is readable by anything on the path. Use https:// unless this is a "
-                "loopback address you control.",
-                file=sys.stderr,
+            _warn(
+                args,
+                f"sending the {args.auth_env} bearer token over plaintext http:// — it is "
+                "readable by anything on the path. Use https:// unless this is a loopback "
+                "address you control.",
             )
         return RemoteTarget(url=target, auth_token=token, transport=args.transport)
     # stdio: env is intentionally empty — the sandbox layers a benign allowlist on top and
     # forces a fake HOME, so the untrusted server never inherits frisk's own secrets (S3).
     stdio_args = [a for a in args.args if a != "--"]
     return StdioTarget(command=target, args=stdio_args, env={}, cwd=os.getcwd())
+
+
+def _warn(args: argparse.Namespace, message: str) -> None:
+    """Warnings go to stderr unless `--quiet` (R35).
+
+    `--quiet` never touches stdout or the exit code: silencing the diagnosis of a degraded
+    sandbox is a choice a piping caller can make, silencing the VERDICT is not.
+    """
+    if not getattr(args, "quiet", False):
+        print(f"warning: {message}", file=sys.stderr)
 
 
 def _enumerate(args: argparse.Namespace) -> tuple[Inventory, list[Finding]]:
@@ -140,13 +184,13 @@ def _enumerate(args: argparse.Namespace) -> tuple[Inventory, list[Finding]]:
         options = SandboxOptions(enabled=not args.no_sandbox, timeout_seconds=args.timeout)
         sandboxed = prepare_stdio(target, options)
         for warning in sandboxed.warnings:
-            print(f"warning: {warning}", file=sys.stderr)
+            _warn(args, warning)
         if sandboxed.decoys is not None and not sandboxed.decoys.atime_reliable:
             # Degraded, not disabled: tamper + canary-exfiltration detection still work.
-            print(
-                "warning: filesystem does not update atime on read — honeypot decoy-read "
-                "detection is degraded (tamper and exfiltration detection still active)",
-                file=sys.stderr,
+            _warn(
+                args,
+                "filesystem does not update atime on read — honeypot decoy-read detection "
+                "is degraded (tamper and exfiltration detection still active)",
             )
         try:
             inventory = enumerate_target(sandboxed.target, timeout=sandboxed.timeout_seconds)
@@ -165,25 +209,69 @@ def _cleanup(sandboxed) -> None:
     sandboxed.cleanup()
 
 
+def _load_baseline(path: str) -> Baseline:
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        # Fail loudly: a baseline that quietly reads as empty turns the gate off without
+        # saying so, which is the worst outcome available here (R6).
+        raise UsageError(f"cannot read baseline {path}: {type(exc).__name__}") from None
+    return load_baseline(text)
+
+
 def _cmd_scan(args: argparse.Namespace) -> int:
     inventory, honeypot_findings = _enumerate(args)
-    findings = run_detectors(inventory, ALL_DETECTORS) + honeypot_findings
-    assessment: Assessment = assess(findings)
-    if args.format == "json":
-        sys.stdout.write(render_json(inventory, findings, assessment))
+    all_findings = run_detectors(inventory, ALL_DETECTORS) + honeypot_findings
+
+    if args.write_baseline:
+        # Writing a baseline is an explicit act of acceptance, so it reports what it accepted
+        # and exits 0 rather than also gating on the very findings it just recorded.
+        try:
+            Path(args.write_baseline).write_text(
+                render_baseline(all_findings), encoding="utf-8"
+            )
+        except OSError as exc:
+            raise UsageError(
+                f"cannot write baseline {args.write_baseline}: {type(exc).__name__}"
+            ) from None
+        accepted_keys = {finding_key(f) for f in all_findings}
+        print(
+            f"wrote baseline: {args.write_baseline} "
+            f"({len(accepted_keys)} accepted finding{'' if len(accepted_keys) == 1 else 's'})",
+            file=sys.stderr,
+        )
+        return 0
+
+    baseline = _load_baseline(args.baseline) if args.baseline else None
+    if baseline is not None:
+        split = apply_baseline(all_findings, baseline)
+        gating, accepted, stale = split.gating, split.accepted, split.stale
     else:
-        sys.stdout.write(render_human(inventory, findings, assessment))
+        gating, accepted, stale = all_findings, [], []
+
+    assessment: Assessment = assess(gating)
+    fail_on = parse_fail_on(args.fail_on)
+    renderer = render_json if args.format == "json" else render_human
+    sys.stdout.write(
+        renderer(
+            inventory,
+            gating,
+            assessment,
+            accepted=accepted,
+            stale=stale,
+            fail_on=args.fail_on,
+        )
+    )
     if not args.no_lock:
         try:
             write_lock(args.lock, inventory)
-            if args.format != "json":
-                print(f"\nwrote baseline: {args.lock}", file=sys.stderr)
+            if args.format != "json" and not args.quiet:
+                print(f"\nwrote lockfile: {args.lock}", file=sys.stderr)
         except OSError as exc:
-            # The verdict is the primary output; a failed baseline write is a warning, not a
+            # The verdict is the primary output; a failed lockfile write is a warning, not a
             # crash — and must not mask the risk exit code.
-            print(f"warning: could not write lockfile {args.lock}: {type(exc).__name__}",
-                  file=sys.stderr)
-    return exit_code(assessment)
+            _warn(args, f"could not write lockfile {args.lock}: {type(exc).__name__}")
+    return exit_code(assessment, fail_on)
 
 
 def _honeypot_line(f: Finding) -> str:
@@ -219,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "scan":
             return _cmd_scan(args)
         return _cmd_verify(args)
-    except (ConnectorError, LockError, UsageError) as exc:
+    except (ConnectorError, LockError, UsageError, BaselineError) as exc:
         # Fail loud, never "clean": a specific, actionable error and a non-zero exit (R6).
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_OPERATIONAL_ERROR

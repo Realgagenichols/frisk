@@ -153,9 +153,24 @@ def test_stamp_text_covers_every_verdict_the_core_can_return():
         "warn": "ADDITIONAL SCREENING",
         "fail": "DENIED",
     }
-    # The core must not be able to return a verdict the page has no stamp for.
-    from frisk.core.score import exit_code
+    # The core must not be able to return a verdict the page has no stamp for. Derived from
+    # `assess` over real findings rather than a stub, so a new verdict string would surface
+    # here instead of being invented by the test.
+    from frisk.core.models import Evidence, Finding, Severity
+    from frisk.core.score import assess
 
-    assert set(stamps) == {"pass", "warn", "fail"}
-    for verdict in stamps:
-        exit_code(type("A", (), {"verdict": verdict})())  # raises on an unmapped verdict
+    def one(severity):
+        return [
+            Finding(
+                detector="D1",
+                severity=severity,
+                item_ref="tool:t",
+                field="description",
+                message="m",
+                evidence=Evidence(category="c"),
+            )
+        ]
+
+    produced = {assess([]).verdict} | {assess(one(s)).verdict for s in Severity}
+    assert produced <= set(stamps), f"verdicts with no stamp: {produced - set(stamps)}"
+    assert produced == {"pass", "warn", "fail"}

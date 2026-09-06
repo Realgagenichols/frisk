@@ -31,7 +31,15 @@ _DETECTOR_LABELS = {
 }
 
 
-def render_human(inventory: Inventory, findings: list[Finding], assessment: Assessment) -> str:
+def render_human(
+    inventory: Inventory,
+    findings: list[Finding],
+    assessment: Assessment,
+    *,
+    accepted: list[Finding] | None = None,
+    stale: list[tuple[str, str, str, str]] | None = None,
+    fail_on: str | None = None,
+) -> str:
     lines: list[str] = []
     server = c0_escape(str(inventory.server_info.get("name", "(unnamed server)")))
     kind_counts = Counter(item.kind for item in inventory.items)
@@ -52,6 +60,15 @@ def render_human(inventory: Inventory, findings: list[Finding], assessment: Asse
         f"verdict: {assessment.verdict.upper()}  |  risk score: {assessment.score}/100"
         f"  |  findings: {counts_desc}"
     )
+    # State the gate in the report. An exit 0 whose reason lives only in the CI config is a
+    # mystery to whoever reads the log six months later.
+    gate = []
+    if fail_on:
+        gate.append(f"failing at {fail_on.upper()} and above")
+    if accepted:
+        gate.append(f"{len(accepted)} accepted via baseline")
+    if gate:
+        lines.append("gate: " + "  |  ".join(gate))
     lines.append("")
 
     for f in sorted(findings, key=lambda f: (-f.severity, f.detector, f.item_ref, f.field)):
@@ -68,10 +85,56 @@ def render_human(inventory: Inventory, findings: list[Finding], assessment: Asse
 
     if not findings:
         lines.append("no findings")
+
+    # Accepted findings are LISTED, not hidden. A baseline changes what fails the build; a
+    # report that omitted them would misdescribe what the server actually advertises.
+    if accepted:
+        lines.append("")
+        lines.append(f"accepted via baseline ({len(accepted)}) — reported, not gating:")
+        for f in sorted(accepted, key=lambda f: (-f.severity, f.detector, f.item_ref, f.field)):
+            lines.append(
+                f"  [{f.severity.name}] {f.detector} — {c0_escape(f.item_ref)} · "
+                f"{c0_escape(f.field)} ({c0_escape(f.evidence.category)})"
+            )
+    if stale:
+        lines.append("")
+        lines.append(
+            f"stale baseline entries ({len(stale)}) — accepted, but no longer present. "
+            "Remove them so the baseline keeps meaning something:"
+        )
+        for detector, item_ref, field_path, category in stale:
+            lines.append(
+                f"  {c0_escape(detector)} — {c0_escape(item_ref)} · {c0_escape(field_path)} "
+                f"({c0_escape(category)})"
+            )
     return "\n".join(lines) + "\n"
 
 
-def render_json(inventory: Inventory, findings: list[Finding], assessment: Assessment) -> str:
+def _finding_doc(f: Finding) -> dict:
+    return {
+        "detector": f.detector,
+        "severity": f.severity.name,
+        "item": f.item_ref,
+        "field": f.field,
+        "message": f.message,
+        "evidence": {
+            "category": f.evidence.category,
+            "offset": f.evidence.offset,
+            "span": list(f.evidence.span) if f.evidence.span else None,
+            "snippet": f.evidence.snippet,
+        },
+    }
+
+
+def render_json(
+    inventory: Inventory,
+    findings: list[Finding],
+    assessment: Assessment,
+    *,
+    accepted: list[Finding] | None = None,
+    stale: list[tuple[str, str, str, str]] | None = None,
+    fail_on: str | None = None,
+) -> str:
     doc = {
         "frisk_version": __version__,
         "verdict": assessment.verdict,
@@ -79,20 +142,18 @@ def render_json(inventory: Inventory, findings: list[Finding], assessment: Asses
         "highest_severity": assessment.highest.name if assessment.highest else None,
         "items_scanned": len(inventory.items),
         "server_info": inventory.server_info,
+        "fail_on": fail_on,
+        "accepted": [
+            _finding_doc(f)
+            for f in sorted(
+                accepted or [], key=lambda f: (-f.severity, f.detector, f.item_ref, f.field)
+            )
+        ],
+        "stale_baseline_entries": [
+            {"detector": d, "item": i, "field": f, "category": c} for d, i, f, c in (stale or [])
+        ],
         "findings": [
-            {
-                "detector": f.detector,
-                "severity": f.severity.name,
-                "item": f.item_ref,
-                "field": f.field,
-                "message": f.message,
-                "evidence": {
-                    "category": f.evidence.category,
-                    "offset": f.evidence.offset,
-                    "span": list(f.evidence.span) if f.evidence.span else None,
-                    "snippet": f.evidence.snippet,
-                },
-            }
+            _finding_doc(f)
             for f in sorted(
                 findings, key=lambda f: (-f.severity, f.detector, f.item_ref, f.field)
             )
