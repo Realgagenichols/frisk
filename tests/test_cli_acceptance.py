@@ -285,12 +285,12 @@ def test_readme_transcript_headers_match_real_output(mode):
     unlike the finding list it does not churn on every rule tweak.
     """
     result = run_frisk(*scan_args(mode, "--no-lock"))
-    header = result.stdout.splitlines()[0]
-    verdict_line = result.stdout.splitlines()[1]
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    assert header in readme, f"README does not contain the current header for {mode}: {header}"
-    assert verdict_line in readme, (
-        f"README does not contain the current verdict line for {mode}: {verdict_line}"
+    # The whole preamble, not just the first line: a `gate:` line was added to real reports
+    # and every transcript silently fell out of date, because only the header was compared.
+    preamble = "\n".join(result.stdout.splitlines()[:3])
+    assert preamble in readme, (
+        f"README's {mode} transcript is stale. Current output starts:\n{preamble}"
     )
 
 
