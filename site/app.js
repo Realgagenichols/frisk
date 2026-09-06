@@ -8,6 +8,7 @@
 // Pinned Pyodide release (cross-cutting Pattern 5): the one CDN request this page makes.
 const PYODIDE_VERSION = "0.26.4";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+const PYODIDE_SRI = "sha384-i3R37b3tF+HWudsUf1VSEOY2YxwSNMqY8DQa9Z0O3xh+NkJ9o+yjcGyIi5huj+nB";
 
 // Plain-language finding headlines (R25): checkpoint vocabulary only where it is ALSO the
 // literal description of the defect. Internal detector codes survive as small-print refs
@@ -67,8 +68,18 @@ async function boot() {
     await new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.src = PYODIDE_BASE + "pyodide.js";
+      // Pinning a version stops the CDN serving a DIFFERENT release; it does not stop the CDN
+      // serving different BYTES for the same one. SRI is what closes that, on a page where
+      // people paste server definitions and auth tokens. Recompute when PYODIDE_VERSION moves:
+      //   curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A
+      script.integrity = PYODIDE_SRI;
+      script.crossOrigin = "anonymous";
       script.onload = resolve;
-      script.onerror = () => reject(new Error("could not load the Pyodide runtime from the CDN"));
+      script.onerror = () =>
+        reject(new Error(
+          "could not load the Pyodide runtime — the CDN was unreachable, or its bytes did "
+          + "not match the pinned integrity hash"
+        ));
       document.head.append(script);
     });
     const pyodide = await loadPyodide({ indexURL: PYODIDE_BASE });

@@ -44,6 +44,7 @@ Everything below is **real `frisk` output**, reproducible from a fresh clone —
 $ uv run frisk scan --no-lock python -m tests.fixtures.mcp_server --mode poisoned
 frisk report — frisk-fixture (9 tools, 1 resources, 1 prompts)
 verdict: FAIL  |  risk score: 100/100  |  findings: 12 HIGH, 8 MEDIUM, 1 LOW
+gate: failing at HIGH and above
 
 [HIGH] D1 instruction-injection — tool:get_time · description @ byte 36
     directive to pass hidden/derived contents as a parameter
@@ -72,6 +73,7 @@ verdict: FAIL  |  risk score: 100/100  |  findings: 12 HIGH, 8 MEDIUM, 1 LOW
 $ uv run frisk scan --no-lock python -m tests.fixtures.mcp_server --mode thief
 frisk report — frisk-fixture (6 tools, 1 resources, 1 prompts)
 verdict: FAIL  |  risk score: 45/100  |  findings: 1 CRITICAL, 1 HIGH, 1 INFO
+gate: failing at HIGH and above
 
 [CRITICAL] D8 honeypot — tool:read_notes · raw @ byte 277
     decoy credential material in advertised definition (exfiltration attempt)
@@ -85,7 +87,9 @@ verdict: FAIL  |  risk score: 45/100  |  findings: 1 CRITICAL, 1 HIGH, 1 INFO
 
 ```console
 $ uv run frisk scan --lock demo.lock python -m tests.fixtures.mcp_server --mode benign
+frisk report — frisk-fixture (6 tools, 1 resources, 1 prompts)
 verdict: PASS  |  risk score: 0/100  |  findings: 1 INFO
+gate: failing at HIGH and above
 
 $ uv run frisk verify --lock demo.lock python -m tests.fixtures.mcp_server --mode mutated
 verify: DRIFT — definitions changed since the lockfile:
@@ -101,13 +105,13 @@ It's not just fixtures: pointed at the official `@modelcontextprotocol/server-fi
 | id | detector | the threat |
 |----|----------|-----------|
 | D1 | instruction injection | descriptions that order the model around: read-secrets directives, "ignore previous instructions", `<IMPORTANT>` pseudo-tags, covert exfil-as-parameter |
-| D2 | hidden content | zero-width chars, Unicode tag chars, bidi overrides, ANSI escapes, HTML comments, homoglyphs — flagged with exact byte offsets |
+| D2 | hidden content | zero-width and default-ignorable chars (soft hyphen, Hangul fillers, invisible math operators, variation selectors, braille blank), Unicode tag chars, bidi and direction marks, ANSI escapes, HTML comments, homoglyphs — flagged with exact byte offsets |
 | D3 | sensitive parameters | schemas that solicit conversation history, env vars, file contents, credentials, or unbounded catch-alls |
 | D4 | scope mismatch | capability creep — a "weather" tool that also takes a `command` |
 | D5 | shadowing | impersonation of common tool names; two definitions sharing one name; "always use this tool instead" steering language |
 | D6 | rug-pull | the `frisk.lock` baseline + `frisk verify` diff |
 | D7 | metadata hygiene | remote/unpinned code sourcing, missing or unpinned server identity |
-| D8 | behavioral honeypot | a server that reads, tampers with, or exfiltrates the sandbox's decoy credentials during enumeration |
+| D8 | behavioral honeypot | a server that reads, tampers with, or exfiltrates the sandbox's decoy credentials during enumeration — including base64-encoded exfiltration |
 
 D1–D7 are **pure, deterministic, network-free, and LLM-free** — the same Python package runs unchanged in the [browser playground](#playground) under Pyodide, so a paste-mode verdict matches the CLI. D8 is CLI-only (it observes a live sandboxed process).
 
@@ -167,7 +171,48 @@ FRISK_AUTH_TOKEN=... frisk scan https://mcp.example.com/mcp
 
 # Re-scan later and diff against the frisk.lock baseline to catch a rug-pull
 frisk verify npx -y @acme/weather-mcp
+
+# Vet every server your client is configured to use, in one pass
+frisk scan --config ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
+
+### Gating a build on it
+
+A real server produces findings that are correct and permanent — the official
+`@modelcontextprotocol/server-filesystem` genuinely advertises `read_file`, `write_file`,
+`edit_file` and `list_directory`, so D5 genuinely flags four impersonations. Accept them once,
+then fail on anything new:
+
+```bash
+frisk scan --write-baseline frisk-baseline.json npx -y @acme/weather-mcp   # review, commit
+frisk scan --baseline frisk-baseline.json npx -y @acme/weather-mcp         # gate on the rest
+```
+
+The baseline is keyed on `(detector, item, field, evidence category)`, so rewording a
+description does not invalidate it — and a **new** category of finding on an already-accepted
+tool is never suppressed, which is the whole point. Accepted findings are still printed,
+marked as accepted; entries that stop matching anything are flagged as stale.
+
+```yaml
+# .github/workflows/frisk.yml — vet every server your repo's .mcp.json declares
+- run: uvx --from mcp-frisk frisk scan --format sarif --quiet
+        --baseline frisk-baseline.json --config .mcp.json > frisk.sarif
+  continue-on-error: true
+- uses: github/codeql-action/upload-sarif@v3
+  with: { sarif_file: frisk.sarif }
+```
+
+Findings are anchored at the line of `.mcp.json` that declares the offending server, so the
+annotation lands where the fix goes — deleting or pinning that entry. A server that fails to
+enumerate is reported as an error result rather than contributing nothing, because a server
+nobody could assess is not a clean one.
+
+> **SARIF needs a location that exists in your checkout.** `--config` anchors on the config
+> file, so point it at a committed `.mcp.json` rather than
+> `~/Library/Application Support/Claude/...`. Single-target scans anchor on the `--lock` path.
+> A config outside the working directory is published by basename only — an uploaded SARIF
+> file would otherwise carry your home path, and with it your username — and frisk warns that
+> the annotations will not resolve.
 
 ### Options
 
@@ -177,7 +222,12 @@ a bare `--` if the server genuinely takes a colliding flag.
 
 | flag | applies to | meaning |
 |------|-----------|---------|
-| `--format {human,json}` | `scan` | report format (default `human`) |
+| `--format {human,json,sarif}` | `scan` | report format (default `human`); SARIF feeds GitHub code scanning |
+| `--fail-on {info…critical}` | `scan` | lowest severity that exits `2` (default `high`) — moves the exit code only, nothing is hidden |
+| `--baseline PATH` | `scan` | accepted findings that are reported but do not gate |
+| `--write-baseline PATH` | `scan` | record this scan's findings as accepted, then exit `0` |
+| `--config PATH` | `scan` | scan every server in a client config instead of one target |
+| `--quiet` | both | silence stderr warnings; stdout and the exit code are unchanged |
 | `--no-lock` | `scan` | do not write a `frisk.lock` baseline |
 | `--lock PATH` | both | lockfile path (default `./frisk.lock`) |
 | `--no-sandbox` | both | disable the seatbelt layer (other layers still apply) |
@@ -191,10 +241,13 @@ a bare `--` if the server genuinely takes a colliding flag.
 | code | meaning |
 |------|---------|
 | `0` | clean — no findings above INFO |
-| `1` | warnings — LOW/MEDIUM findings |
-| `2` | HIGH/CRITICAL findings, drift on `verify`, or an operational error |
+| `1` | findings below the failing threshold |
+| `2` | findings at or above it, drift on `verify`, or an operational error |
 
-`2` deliberately covers both "the server is dangerous" and "frisk could not assess it" — including an unexpected crash, which exits `2` rather than `1` so a failure can never read to CI as the milder "warnings" result.
+The threshold is `high` by default and moves with `--fail-on`. Two things sit slightly outside that summary, both deliberate:
+
+- **Accumulated risk fails too.** A server can reach a saturated 100/100 on MEDIUMs alone — six tools impersonating built-in names, each soliciting credentials — which is not a warning. A risk score of 50 or more fails at the default threshold. `--fail-on critical` still won't fail on it, because someone asking only to be woken for CRITICALs meant it.
+- **`2` covers "frisk could not assess it"** as well as "the server is dangerous", including an unexpected crash, which exits `2` rather than `1` so a failure can never read to CI as the milder result.
 
 ## The honeypot
 
@@ -253,6 +306,8 @@ Stated plainly, because a security tool that overclaims is worse than one that d
 - **frisk vets definitions and enumeration-time behavior** — it does not watch what a server does at *call* time. That's runtime territory: pair it with [tollbooth](https://github.com/Realgagenichols/tollbooth).
 - **The seatbelt sandbox is macOS-only.** Elsewhere the lightweight fallback (fake HOME, scrubbed env, rlimits, timeout) applies, with a warning.
 - **The playground can't sandbox or verify** — browser rules. Paste mode is exact; direct-connect depends on the server's CORS policy.
+- **A baseline accepts findings, it does not fix them.** `--baseline` moves an accepted finding out of the exit-code decision and nothing else; the finding is still printed, and a *new* category of finding on an accepted tool still fails the build.
+- **SARIF needs a location inside your checkout.** GitHub rejects a result with no location, so `--config` anchors findings at the config file and single-target scans anchor at the `--lock` path. Point `--config` at a committed `.mcp.json` in CI; a config elsewhere is published by basename and its annotations won't resolve.
 
 ## Architecture
 

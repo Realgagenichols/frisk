@@ -153,9 +153,70 @@ def test_stamp_text_covers_every_verdict_the_core_can_return():
         "warn": "ADDITIONAL SCREENING",
         "fail": "DENIED",
     }
-    # The core must not be able to return a verdict the page has no stamp for.
-    from frisk.core.score import exit_code
+    # The core must not be able to return a verdict the page has no stamp for. Derived from
+    # `assess` over real findings rather than a stub, so a new verdict string would surface
+    # here instead of being invented by the test.
+    from frisk.core.models import Evidence, Finding, Severity
+    from frisk.core.score import assess
 
-    assert set(stamps) == {"pass", "warn", "fail"}
-    for verdict in stamps:
-        exit_code(type("A", (), {"verdict": verdict})())  # raises on an unmapped verdict
+    def one(severity):
+        return [
+            Finding(
+                detector="D1",
+                severity=severity,
+                item_ref="tool:t",
+                field="description",
+                message="m",
+                evidence=Evidence(category="c"),
+            )
+        ]
+
+    produced = {assess([]).verdict} | {assess(one(s)).verdict for s in Severity}
+    assert produced <= set(stamps), f"verdicts with no stamp: {produced - set(stamps)}"
+    assert produced == {"pass", "warn", "fail"}
+
+
+# ── network posture the page enforces rather than merely claims (R27) ───────
+
+
+def test_pyodide_script_is_pinned_and_integrity_checked():
+    """Pinning a version stops the CDN serving a different RELEASE; it does not stop it
+    serving different BYTES for the same one. On a page where people paste server
+    definitions and auth tokens, SRI is what closes that."""
+    source = (SITE / "app.js").read_text(encoding="utf-8")
+    version = re.search(r'PYODIDE_VERSION = "([\d.]+)"', source)
+    sri = re.search(r'PYODIDE_SRI = "(sha384-[A-Za-z0-9+/=]+)"', source)
+    assert version, "Pyodide version is not pinned"
+    assert sri, "no subresource-integrity hash for the Pyodide loader"
+    assert "script.integrity = PYODIDE_SRI" in source
+    assert 'script.crossOrigin = "anonymous"' in source  # SRI is inert without it
+    # sha384 is 48 bytes; base64 of 48 bytes is 64 chars.
+    assert len(sri.group(1)) == len("sha384-") + 64
+
+
+def test_csp_confines_the_page_to_itself_plus_the_pinned_cdn():
+    html = (SITE / "index.html").read_text(encoding="utf-8")
+    csp = re.search(r'http-equiv="Content-Security-Policy" content="([^"]+)"', html)
+    assert csp, "no Content-Security-Policy meta tag"
+    policy = dict(
+        (part.split(None, 1) + [""])[:2]
+        for part in (p.strip() for p in csp.group(1).split(";"))
+        if part
+    )
+    assert policy["default-src"] == "'self'"
+    assert "https://cdn.jsdelivr.net" in policy["script-src"]
+    # The privacy claim is that definitions never reach a backend: no form posts anywhere,
+    # and styles/fonts/images are same-origin only.
+    assert policy["form-action"] == "'none'"
+    assert policy["style-src"] == "'self'" and policy["font-src"] == "'self'"
+    assert policy["object-src"] == "'none'" and policy["frame-ancestors"] == "'none'"
+
+
+def test_csp_script_src_names_exactly_the_origin_app_js_loads():
+    """P26: the policy and the code that depends on it must be checked against each other,
+    not each declared well-formed on its own."""
+    html = (SITE / "index.html").read_text(encoding="utf-8")
+    source = (SITE / "app.js").read_text(encoding="utf-8")
+    loaded = re.search(r'PYODIDE_BASE = `(https://[^/`]+)', source).group(1)
+    csp = re.search(r'content="([^"]+)"', html[html.index("Content-Security-Policy"):]).group(1)
+    assert loaded in csp, f"app.js loads {loaded}, which the CSP does not allow"

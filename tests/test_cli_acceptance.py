@@ -285,12 +285,12 @@ def test_readme_transcript_headers_match_real_output(mode):
     unlike the finding list it does not churn on every rule tweak.
     """
     result = run_frisk(*scan_args(mode, "--no-lock"))
-    header = result.stdout.splitlines()[0]
-    verdict_line = result.stdout.splitlines()[1]
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    assert header in readme, f"README does not contain the current header for {mode}: {header}"
-    assert verdict_line in readme, (
-        f"README does not contain the current verdict line for {mode}: {verdict_line}"
+    # The whole preamble, not just the first line: a `gate:` line was added to real reports
+    # and every transcript silently fell out of date, because only the header was compared.
+    preamble = "\n".join(result.stdout.splitlines()[:3])
+    assert preamble in readme, (
+        f"README's {mode} transcript is stale. Current output starts:\n{preamble}"
     )
 
 
@@ -323,3 +323,240 @@ def test_reported_version_matches_installed_metadata():
 
     result = run_frisk(*scan_args("benign", "--format", "json", "--no-lock"))
     assert json.loads(result.stdout)["frisk_version"] == version("mcp-frisk")
+
+
+# ── R32/R33/R35: the flags that decide whether a CI gate survives ───────────
+
+
+def test_fail_on_moves_the_exit_code_without_hiding_findings(tmp_path):
+    poisoned = run_frisk(*scan_args("poisoned", "--no-lock", "--fail-on", "critical"))
+    default = run_frisk(*scan_args("poisoned", "--no-lock"))
+    assert default.returncode == 2
+    assert poisoned.returncode == 1, "HIGH findings should not fail a critical-only gate"
+    # Same findings in both reports — the threshold is an exit-code decision, not a filter.
+    assert poisoned.stdout.count("[HIGH]") == default.stdout.count("[HIGH]") > 0
+    assert "failing at CRITICAL and above" in poisoned.stdout
+
+
+def test_baseline_round_trip_accepts_and_still_reports(tmp_path):
+    baseline = tmp_path / "frisk-baseline.json"
+    written = run_frisk(*scan_args("poisoned", "--no-lock", "--write-baseline", str(baseline)))
+    assert written.returncode == 0, written.stderr
+    assert baseline.exists() and "wrote baseline" in written.stderr
+
+    rescan = run_frisk(*scan_args("poisoned", "--no-lock", "--baseline", str(baseline)))
+    assert rescan.returncode == 0, rescan.stdout + rescan.stderr
+    assert "PASS" in rescan.stdout
+    # Reported, not hidden — a report that omitted them would misdescribe the server.
+    assert "accepted via baseline" in rescan.stdout
+    assert "D1" in rescan.stdout
+
+
+def test_baseline_does_not_suppress_a_newly_poisoned_server(tmp_path):
+    """The property that makes a baseline safe: accepting today's findings must not accept
+    tomorrow's. Baseline is taken from the benign server, then the server turns malicious."""
+    baseline = tmp_path / "frisk-baseline.json"
+    run_frisk(*scan_args("benign", "--no-lock", "--write-baseline", str(baseline)))
+    rescan = run_frisk(*scan_args("relocated", "--no-lock", "--baseline", str(baseline)))
+    assert rescan.returncode == 2, rescan.stdout + rescan.stderr
+    assert "FAIL" in rescan.stdout
+
+
+def test_stale_baseline_entries_are_surfaced(tmp_path):
+    baseline = tmp_path / "frisk-baseline.json"
+    run_frisk(*scan_args("poisoned", "--no-lock", "--write-baseline", str(baseline)))
+    # The same baseline against a server that no longer has those findings.
+    rescan = run_frisk(*scan_args("benign", "--no-lock", "--baseline", str(baseline)))
+    assert "stale baseline entries" in rescan.stdout
+    assert rescan.returncode == 0
+
+
+def test_unreadable_baseline_fails_loudly_rather_than_gating_on_nothing(tmp_path):
+    result = run_frisk(*scan_args("poisoned", "--no-lock", "--baseline", str(tmp_path / "nope")))
+    assert result.returncode == 2
+    assert "cannot read baseline" in result.stderr
+
+
+def test_quiet_silences_stderr_but_not_the_report_or_the_exit_code(tmp_path):
+    loud = run_frisk(*scan_args("poisoned", "--no-lock"))
+    quiet = run_frisk(*scan_args("poisoned", "--no-lock", "--quiet"))
+    assert quiet.returncode == loud.returncode == 2
+    assert quiet.stdout == loud.stdout
+    assert "warning:" not in quiet.stderr
+
+
+def test_json_with_quiet_is_pipeable(tmp_path):
+    result = run_frisk(*scan_args("poisoned", "--format", "json", "--no-lock", "--quiet"))
+    doc = json.loads(result.stdout)  # nothing but JSON on stdout
+    assert doc["fail_on"] == "high"
+    assert result.stderr == ""
+
+
+def test_sarif_format_is_valid_and_names_every_rule_it_uses():
+    result = run_frisk(*scan_args("poisoned", "--format", "sarif", "--no-lock", "--quiet"))
+    assert result.returncode == 2
+    assert result.stderr == "", "machine formats must leave stderr clean for piping"
+    doc = json.loads(result.stdout)
+    run = doc["runs"][0]
+    assert doc["version"] == "2.1.0"
+    declared = {r["id"] for r in run["tool"]["driver"]["rules"]}
+    assert {r["ruleId"] for r in run["results"]} == declared
+    assert run["invocations"][0]["properties"]["verdict"] == "fail"
+    # S3: no decoy or credential material anywhere in a file another tool will ingest.
+    assert "PRIVATE KEY" not in result.stdout
+
+
+def _write_config(tmp_path, **servers):
+    path = tmp_path / "mcp.json"
+    path.write_text(json.dumps({"mcpServers": servers}), encoding="utf-8")
+    return path
+
+
+def _fixture_server(mode):
+    return {
+        "command": sys.executable,
+        "args": ["-m", "tests.fixtures.mcp_server", "--mode", mode],
+    }
+
+
+def test_config_scans_every_server_and_one_failure_does_not_abort_the_rest(tmp_path):
+    """R36: the point of this mode is a picture of the WHOLE setup, so a single broken entry
+    must not hide the state of the others — while still gating the exit code (R6)."""
+    config = _write_config(
+        tmp_path,
+        benign=_fixture_server("benign"),
+        poisoned=_fixture_server("poisoned"),
+        broken={"command": "/nonexistent/frisk-no-such-server"},
+        off={**_fixture_server("benign"), "disabled": True},
+    )
+    result = run_frisk("scan", "--no-lock", "--quiet", "--config", str(config))
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "4 servers from" in result.stdout
+    for name in ("benign", "poisoned", "broken", "off"):
+        assert name in result.stdout
+    assert result.stdout.count("verdict:") == 2  # the two that enumerated
+    assert "ERROR:" in result.stdout                # the broken one, reported not fatal
+    assert "disabled in the config" in result.stdout
+
+
+def test_config_of_only_healthy_servers_exits_zero(tmp_path):
+    config = _write_config(tmp_path, a=_fixture_server("benign"), b=_fixture_server("benign"))
+    result = run_frisk("scan", "--no-lock", "--quiet", "--config", str(config))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_config_and_a_target_together_is_a_usage_error(tmp_path):
+    config = _write_config(tmp_path, a=_fixture_server("benign"))
+    result = run_frisk("scan", "--no-lock", "--config", str(config), "/bin/echo")
+    assert result.returncode == 2
+    assert "not both" in result.stderr
+
+
+def test_no_target_and_no_config_is_a_usage_error():
+    result = run_frisk("scan", "--no-lock")
+    assert result.returncode == 2
+    assert "no target given" in result.stderr
+
+
+def test_unreadable_config_fails_loudly(tmp_path):
+    result = run_frisk("scan", "--no-lock", "--config", str(tmp_path / "missing.json"))
+    assert result.returncode == 2
+    assert "cannot read config" in result.stderr
+
+
+def test_config_baseline_does_not_leak_acceptance_between_servers(tmp_path):
+    """Two config entries running the SAME poisoned server: accepting the findings under one
+    name must not accept them under the other. Before the key was server-scoped it did."""
+    baseline = tmp_path / "baseline.json"
+    both = _write_config(
+        tmp_path, alpha=_fixture_server("poisoned"), beta=_fixture_server("poisoned")
+    )
+    only_alpha = tmp_path / "alpha.json"
+    only_alpha.write_text(
+        json.dumps({"mcpServers": {"alpha": _fixture_server("poisoned")}}), encoding="utf-8"
+    )
+    # Accept everything for `alpha` only.
+    run_frisk("scan", "--no-lock", "--quiet", "--config", str(only_alpha),
+              "--write-baseline", str(baseline))
+    entries = json.loads(baseline.read_text())["findings"]
+    assert {e["server"] for e in entries} == {"alpha"}
+
+    result = run_frisk("scan", "--no-lock", "--quiet", "--config", str(both),
+                       "--format", "json", "--baseline", str(baseline))
+    doc = json.loads(result.stdout)
+    by_name = {s["name"]: s for s in doc["servers"]}
+    assert by_name["alpha"]["findings"] == [], "alpha's findings were accepted"
+    assert by_name["beta"]["findings"], "beta must NOT inherit alpha's acceptance"
+    assert result.returncode == 2
+
+
+def test_config_json_keeps_every_server_distinguishable(tmp_path):
+    config = _write_config(
+        tmp_path,
+        good=_fixture_server("benign"),
+        bad=_fixture_server("poisoned"),
+        dead={"command": "/nonexistent/frisk-no-such-server"},
+        off={**_fixture_server("benign"), "disabled": True},
+    )
+    result = run_frisk(
+        "scan", "--no-lock", "--quiet", "--format", "json", "--config", str(config)
+    )
+    assert result.returncode == 2
+    # `--quiet` silences FRISK's warnings. The dead server's own exec failure still reaches
+    # stderr because it is the child's output, not ours — swallowing it would hide the very
+    # diagnostic someone needs. stdout stays pure JSON either way, which is what piping needs.
+    assert "warning:" not in result.stderr
+    doc = json.loads(result.stdout)
+    status = {s["name"]: s["status"] for s in doc["servers"]}
+    assert status == {"good": "scanned", "bad": "scanned", "dead": "error", "off": "disabled"}
+    by_name = {s["name"]: s for s in doc["servers"]}
+    # A flat merge could not say which server was which, nor that one was never assessed.
+    assert by_name["good"]["verdict"] == "pass" and by_name["bad"]["verdict"] == "fail"
+    assert by_name["dead"]["error"]
+    assert doc["verdict"] == "fail" and doc["servers_failed"] == 1
+
+
+def test_config_sarif_is_one_run_anchored_in_the_config_file(tmp_path):
+    config = _write_config(
+        tmp_path,
+        good=_fixture_server("benign"),
+        bad=_fixture_server("poisoned"),
+        dead={"command": "/nonexistent/frisk-no-such-server"},
+    )
+    result = run_frisk(
+        "scan", "--no-lock", "--quiet", "--format", "sarif", "--config", str(config)
+    )
+    assert result.returncode == 2
+    assert "warning:" not in result.stderr
+    doc = json.loads(result.stdout)
+    assert len(doc["runs"]) == 1
+    run = doc["runs"][0]
+    # Every result must carry a location or GitHub rejects the whole upload.
+    assert run["results"] and all("locations" in r for r in run["results"])
+    # The basename, not the absolute path: a SARIF document gets uploaded, and the absolute
+    # path would carry the OS username with it (see the S3 test below).
+    assert all(
+        r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == config.name
+        for r in run["results"]
+    )
+    assert any(r["ruleId"] == "frisk/scan-error" for r in run["results"])
+    servers = {r["properties"]["server"] for r in run["results"]}
+    assert servers == {"good", "bad", "dead"}
+
+
+def test_sarif_never_publishes_an_absolute_config_path(tmp_path):
+    """S3 applied to an uploaded artifact: the document must not carry the absolute path,
+    which on macOS contains the user's account name."""
+    config = tmp_path / "claude_desktop_config.json"
+    config.write_text(json.dumps({"mcpServers": {"a": _fixture_server("poisoned")}}), "utf-8")
+    result = run_frisk("scan", "--no-lock", "--format", "sarif", "--config", str(config))
+    assert result.returncode == 2
+    assert str(tmp_path) not in result.stdout, "the absolute path reached the SARIF document"
+    doc = json.loads(result.stdout)
+    uris = {
+        r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+        for r in doc["runs"][0]["results"]
+    }
+    assert uris == {"claude_desktop_config.json"}
+    # And it says so, rather than silently producing annotations that land nowhere.
+    assert "outside the working directory" in result.stderr
