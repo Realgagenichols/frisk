@@ -108,7 +108,13 @@ class SensitiveParams:
                 findings.extend(self._scan_name(item, path, name))
             description = spec.get("description")
             if isinstance(description, str):
-                findings.extend(self._scan_description(item, f"{path}.description", description))
+                described = self._scan_description(item, f"{path}.description", description)
+                # One property, one finding per category. A `token` param described as "a
+                # personal access token" tripped the name rule AND the description rule, so
+                # an honest, well-documented parameter scored double an undocumented one —
+                # the report punished the documentation.
+                already = {f.evidence.category for f in findings}
+                findings.extend(f for f in described if f.evidence.category not in already)
             if self._is_generic_catchall(name, spec):
                 findings.append(
                     self._finding(

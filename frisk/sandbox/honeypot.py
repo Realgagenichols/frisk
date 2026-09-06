@@ -81,6 +81,7 @@ class DecoySet:
 
 def seed_decoys(fake_home: Path) -> DecoySet:
     """Plant decoy credentials under ``fake_home`` and record their stat baselines."""
+    fake_home.mkdir(parents=True, exist_ok=True)
     canary = secrets.token_hex(_CANARY_BYTES)
     subs = {"canary": canary, "canary_upper16": canary[:16].upper()}
     baselines: dict[str, DecoyBaseline] = {}

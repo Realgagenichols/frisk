@@ -24,8 +24,14 @@ RULES = [
         severity=Severity.HIGH,
         # "access" is deliberately absent from the verb list: "uses your AWS access
         # credentials" is ordinary docs prose, not a read directive.
+        # The verb must be a DIRECTIVE, not a description of what something else does.
+        # "credentials are read from ~/.aws/credentials by the AWS SDK itself" is ordinary
+        # documentation and was scoring HIGH — i.e. exit 2 on an honest tool, which is the
+        # most expensive kind of false positive there is. A copula or "being" in front of
+        # the verb makes it passive voice; a directive never has one (Pattern 3).
         pattern=re.compile(
-            r"\b(?:read|open|cat|load|fetch)\b[^.\n]{0,60}?"
+            r"\b(?<!\bis )(?<!\bare )(?<!\bwas )(?<!\bwere )(?<!\bbeing )"
+            r"(?:read|open|cat|load|fetch)\b[^.\n]{0,60}?"
             r"(?:~/\.ssh|~/\.aws|id_rsa|id_ed25519|/etc/passwd|\.env\b|private\s+key"
             r"|credentials?\b)",
             _I,
@@ -39,7 +45,8 @@ RULES = [
         # ("send $OPENAI_API_KEY"); secret nouns need an exfil-flavored verb — "pass your
         # API key as the api_key parameter" is standard REST docs and must stay clean.
         pattern=re.compile(
-            r"\b(?:send|read|include|forward|pass|exfiltrate|copy|upload)\b[^.\n]{0,60}?"
+            r"\b(?<!\bis )(?<!\bare )(?<!\bwas )(?<!\bwere )(?<!\bbeing )"
+            r"(?:send|read|include|forward|pass|exfiltrate|copy|upload)\b[^.\n]{0,60}?"
             r"(?:\$[A-Z][A-Z0-9_]{3,}|environment\s+variables?|env\s+vars?)"
             r"|\b(?:exfiltrate|forward|copy|smuggle|steal|harvest)\b[^.\n]{0,60}?"
             r"(?:api[\s_-]?keys?|access\s+tokens?|passwords?|secrets?)",

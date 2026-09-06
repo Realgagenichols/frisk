@@ -5,10 +5,33 @@ description = "Vet a third-party MCP server before you trust it: sandboxed conne
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
+keywords = ["mcp", "model-context-protocol", "security", "scanner", "prompt-injection", "supply-chain"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
 authors = [{ name = "Gage Nichols" }]
 dependencies = [
-    "mcp>=1.2.0",
+    # Upper bound is not caution, it is history: mcp 1.28 renamed streamablehttp_client and
+    # broke every remote scan (commit e6a8052). uv.lock protects this repo, not consumers.
+    "mcp>=1.2.0,<2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Realgagenichols/frisk"
+Repository = "https://github.com/Realgagenichols/frisk"
+Issues = "https://github.com/Realgagenichols/frisk/issues"
+Playground = "https://realgagenichols.github.io/frisk/"
 
 [project.scripts]
 frisk = "frisk.cli:main"
@@ -25,6 +48,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["frisk"]
+# Ship the PEP 561 marker so downstream type-checkers see the annotations, not Any.
+artifacts = ["frisk/py.typed"]
 
 [tool.pytest.ini_options]
 # Run tests against the working tree, not a stale installed wheel (cross-cutting Pattern 9).

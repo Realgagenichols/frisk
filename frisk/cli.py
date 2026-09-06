@@ -6,6 +6,7 @@ import argparse
 import os
 import sys
 
+from frisk import __version__
 from frisk.connector import ConnectorError, RemoteTarget, StdioTarget, Target, enumerate_target
 from frisk.core.detectors import ALL_DETECTORS
 from frisk.core.engine import run_detectors
@@ -26,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="frisk",
         description="Vet a third-party MCP server before you trust it.",
     )
+    parser.add_argument("--version", action="version", version=f"frisk {__version__}")
     sub = parser.add_subparsers(dest="command")
 
     for name, help_text in (
@@ -160,10 +162,7 @@ def _enumerate(args: argparse.Namespace) -> tuple[Inventory, list[Finding]]:
 
 
 def _cleanup(sandboxed) -> None:
-    import shutil
-
-    for path in sandboxed._cleanup:
-        shutil.rmtree(path, ignore_errors=True)
+    sandboxed.cleanup()
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:

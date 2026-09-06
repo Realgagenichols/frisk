@@ -13,10 +13,14 @@ class StdioTarget:
     args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
     cwd: str | None = None
+    # What to call this target in errors. The sandbox rewrites `command` to `sandbox-exec`,
+    # so without this every failure read `stdio:sandbox-exec` — naming frisk's own wrapper
+    # instead of the command the user typed, which is the one thing they need to see.
+    display_name: str | None = None
 
     @property
     def label(self) -> str:
-        return f"stdio:{self.command}"
+        return f"stdio:{self.display_name or self.command}"
 
 
 @dataclass(frozen=True)

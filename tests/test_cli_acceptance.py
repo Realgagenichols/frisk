@@ -124,14 +124,22 @@ def test_scan_thief_reports_canary_exfil_in_json_without_leaking_decoy(tmp_path)
 
 
 def test_verify_snoop_exits_2_even_with_clean_diff(tmp_path):
-    # Lock the benign definitions, then verify against snoop — the definitions are unchanged
-    # (clean diff) but the server reads a decoy, so verify must still exit non-zero (R24).
+    """R24: the definitions are unchanged, but the server read a decoy — verify must fail.
+
+    The skip is gated on the CAPABILITY, probed before the run, not on the outcome. It used
+    to read `if verify.returncode == 0 and "OK" in stdout: skip(...)` — which is the exact
+    symptom of the regression it exists to catch, so deleting the HIGH-severity gate in
+    cli.py turned this test green-with-a-skip instead of red (cross-cutting P87).
+    """
+    from frisk.sandbox import seed_decoys
+
+    if not seed_decoys(tmp_path / "atime-probe").atime_reliable:
+        pytest.skip("filesystem does not update atime on read — decoy-access is undetectable")
+
     lock = tmp_path / "frisk.lock"
     scan = run_frisk(*scan_args("benign", "--lock", str(lock)))
     assert scan.returncode == 0 and lock.exists(), scan.stderr
     verify = run_frisk(*verify_args("snoop", "--lock", str(lock)))
-    if verify.returncode == 0 and "OK" in verify.stdout:
-        pytest.skip("filesystem does not support atime-based access detection")
     assert verify.returncode == 2, verify.stdout + verify.stderr
     assert "honeypot:" in verify.stderr and "decoy-access" not in verify.stdout
 
@@ -266,3 +274,52 @@ def test_relocated_payload_is_caught_through_the_real_connector(tmp_path):
     assert any(
         f["detector"] == "D1" and f["field"].startswith("annotations") for f in doc["findings"]
     ), [f["field"] for f in doc["findings"]]
+
+
+@pytest.mark.parametrize("mode", ["poisoned", "thief", "benign"])
+def test_readme_transcript_headers_match_real_output(mode):
+    """README:38 claims its transcripts are 'real frisk output, reproducible from a fresh
+    clone'. That is a published figure, so it needs a mechanical relation to its source
+    (Pattern 68) — adding one resource to the fixture server silently falsified three of
+    them. Only the header line is compared: it carries the counts, verdict and score, and
+    unlike the finding list it does not churn on every rule tweak.
+    """
+    result = run_frisk(*scan_args(mode, "--no-lock"))
+    header = result.stdout.splitlines()[0]
+    verdict_line = result.stdout.splitlines()[1]
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    assert header in readme, f"README does not contain the current header for {mode}: {header}"
+    assert verdict_line in readme, (
+        f"README does not contain the current verdict line for {mode}: {verdict_line}"
+    )
+
+
+def test_installed_console_script_runs_without_pythonpath():
+    """The other tests inject PYTHONPATH so the fixture SERVER can be imported — which also
+    masks a broken install of frisk itself. This one runs the console script with PYTHONPATH
+    removed, so it exercises what a user actually gets.
+
+    Known failure mode on macOS: `uv` marks the editable `.pth` in site-packages with
+    UF_HIDDEN, and CPython's `site.addpackage` skips hidden `.pth` files, so the editable
+    install silently never lands on sys.path. Fix:
+        chflags nohidden .venv/lib/python*/site-packages/*.pth
+    and use `uv run --no-sync frisk …` (a plain `uv run` re-hides it).
+    """
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    result = subprocess.run(
+        [str(FRISK_BIN), "--version"], env=env, capture_output=True, text=True, timeout=60
+    )
+    assert result.returncode == 0, (
+        f"the installed console script is broken: {result.stderr.strip()}\n"
+        "See this test's docstring for the macOS UF_HIDDEN .pth cause and fix."
+    )
+    assert result.stdout.startswith("frisk "), result.stdout
+
+
+def test_reported_version_matches_installed_metadata():
+    # `frisk_version` in the JSON report used to be a hand-copied literal that could drift
+    # from pyproject with nothing noticing.
+    from importlib.metadata import version
+
+    result = run_frisk(*scan_args("benign", "--format", "json", "--no-lock"))
+    assert json.loads(result.stdout)["frisk_version"] == version("frisk")

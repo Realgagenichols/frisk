@@ -64,6 +64,13 @@ class SandboxResult:
     rlimits: RlimitSupport | None = None
     _cleanup: list[Path] = field(default_factory=list, repr=False)
 
+    def cleanup(self) -> None:
+        """Remove the throwaway fake HOME, decoys and all. Safe to call more than once."""
+        import shutil
+
+        for path in self._cleanup:
+            shutil.rmtree(path, ignore_errors=True)
+
 
 def seatbelt_available() -> bool:
     """True when the macOS seatbelt sandbox (`sandbox-exec`) can be used."""
@@ -338,7 +345,13 @@ def prepare_stdio(
         )
         command, args = _wrap_rlimits(rlimit_script, inner)
 
-    sandboxed = StdioTarget(command=command, args=args, env=scrubbed, cwd=target.cwd)
+    sandboxed = StdioTarget(
+        command=command,
+        args=args,
+        env=scrubbed,
+        cwd=target.cwd,
+        display_name=target.display_name or target.command,
+    )
     return SandboxResult(
         target=sandboxed,
         timeout_seconds=options.timeout_seconds,

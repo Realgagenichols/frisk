@@ -5,7 +5,7 @@
 <p align="center">
   <a href="#"><img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white"></a>
   <a href="#"><img alt="Built on MCP" src="https://img.shields.io/badge/built%20on-MCP-58A6FF"></a>
-  <a href="#development"><img alt="211 tests" src="https://img.shields.io/badge/tests-211%20passing-3FB950"></a>
+  <a href="https://github.com/Realgagenichols/frisk/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Realgagenichols/frisk/actions/workflows/ci.yml/badge.svg"></a>
   <a href="#the-sandbox"><img alt="Sandboxed by default" src="https://img.shields.io/badge/default-sandboxed-F85149"></a>
   <a href="https://realgagenichols.github.io/frisk/"><img alt="Playground" src="https://img.shields.io/badge/playground-in%20your%20browser-D29922"></a>
   <a href="https://github.com/Realgagenichols/frisk/blob/main/LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-8957E5"></a>
@@ -41,8 +41,8 @@ Everything below is **real `frisk` output**, reproducible from a fresh clone —
 
 ```console
 $ uv run frisk scan --no-lock python -m tests.fixtures.mcp_server --mode poisoned
-frisk report — frisk-fixture (9 tools, 0 resources, 1 prompts)
-verdict: FAIL  |  risk score: 100/100  |  findings: 12 HIGH, 12 MEDIUM, 1 LOW
+frisk report — frisk-fixture (9 tools, 1 resources, 1 prompts)
+verdict: FAIL  |  risk score: 100/100  |  findings: 12 HIGH, 8 MEDIUM, 1 LOW
 
 [HIGH] D1 instruction-injection — tool:get_time · description @ byte 36
     directive to pass hidden/derived contents as a parameter
@@ -62,14 +62,14 @@ verdict: FAIL  |  risk score: 100/100  |  findings: 12 HIGH, 12 MEDIUM, 1 LOW
 [MEDIUM] D3 sensitive-params — tool:improve_answer · inputSchema.properties.api_key#key @ byte 0
     property "api_key" solicits a credential or token
     (credential-solicitation) "api_key"
-    ⋯ 19 more findings — run the command for the full report ⋯
+    ⋯ 15 more findings — run the command for the full report ⋯
 ```
 
 **2. Credential theft, observed behaviorally.** This server's *definitions* are clean. But during enumeration it reads the sandbox's decoy `~/.aws/credentials` and smuggles the planted canary back out through a tool description:
 
 ```console
 $ uv run frisk scan --no-lock python -m tests.fixtures.mcp_server --mode thief
-frisk report — frisk-fixture (6 tools, 0 resources, 1 prompts)
+frisk report — frisk-fixture (6 tools, 1 resources, 1 prompts)
 verdict: FAIL  |  risk score: 45/100  |  findings: 1 CRITICAL, 1 HIGH, 1 INFO
 
 [CRITICAL] D8 honeypot — tool:read_notes · raw @ byte 277
@@ -159,6 +159,23 @@ FRISK_AUTH_TOKEN=... frisk scan https://mcp.example.com/mcp
 frisk verify npx -y @acme/weather-mcp
 ```
 
+### Options
+
+frisk's own options go **before** the target; everything after the target is passed to the
+server. A frisk flag placed after the target is refused rather than silently forwarded — use
+a bare `--` if the server genuinely takes a colliding flag.
+
+| flag | applies to | meaning |
+|------|-----------|---------|
+| `--format {human,json}` | `scan` | report format (default `human`) |
+| `--no-lock` | `scan` | do not write a `frisk.lock` baseline |
+| `--lock PATH` | both | lockfile path (default `./frisk.lock`) |
+| `--no-sandbox` | both | disable the seatbelt layer (other layers still apply) |
+| `--timeout SECONDS` | both | hard wall-clock bound on handshake + enumeration (default 30) |
+| `--transport {auto,http,sse}` | both | remote transport (default `auto`) |
+| `--auth-env VAR` | both | env var holding a remote bearer token (default `FRISK_AUTH_TOKEN`) |
+| `--version` | — | print the installed version |
+
 ### Exit codes (CI gate)
 
 | code | meaning |
@@ -243,9 +260,44 @@ Stack: the official `mcp` Python SDK — no other runtime dependencies.
 ## Development
 
 ```bash
-uv run pytest          # 211 tests, incl. a real-subprocess fixture MCP server harness
+uv run pytest          # unit, regression, and CLI acceptance tests against a real
+                       # subprocess fixture MCP server (and a real seatbelt sandbox on macOS)
 uv run ruff check .    # lint
 ```
+
+The browser end-to-end for the playground is separate, and needs Playwright:
+
+```bash
+npm i playwright && npx playwright install chromium
+uv run python scripts/build_site.py
+uv run python -m http.server 8912 -d site &
+node scripts/e2e_playground.mjs ./screenshots
+```
+
+CI runs ruff and pytest on macOS and Linux across Python 3.12 and 3.13; the Pages deploy is
+gated on that job. The seatbelt tests skip automatically off macOS.
+
+<details>
+<summary><b>macOS: <code>uv run frisk</code> fails with <code>ModuleNotFoundError</code></b></summary>
+
+If the project lives under a directory a background agent watches — `~/Desktop` and
+`~/Documents` under iCloud Drive are the usual ones — something re-applies the `UF_HIDDEN`
+flag to the editable install's `.pth` file inside `.venv`, within seconds and with no command
+run. CPython's `site.addpackage` skips hidden `.pth` files, so the editable install silently
+never reaches `sys.path` and every `uv run frisk` command fails.
+
+`chflags nohidden .venv/lib/python*/site-packages/*.pth` fixes it until the flag comes back.
+The durable fix is to keep the virtualenv out of the watched tree:
+
+```bash
+export UV_PROJECT_ENVIRONMENT="$HOME/.venvs/frisk"
+uv sync
+```
+
+`test_installed_console_script_runs_without_pythonpath` exists to catch this: the other
+acceptance tests set `PYTHONPATH` so the fixture *server* can be imported, which also masks a
+broken install of frisk itself.
+</details>
 
 ## License
 

@@ -99,9 +99,15 @@ _STEERING_RULES = [
     Rule(
         category="steering-toward",
         severity=Severity.MEDIUM,
+        # Scoped to a TOOL/SERVER object, mirroring its steering-away sibling. Without that,
+        # "Always use this endpoint for binary data rather than the text one" — one server
+        # choosing between its own two endpoints — read as cross-server steering (Pattern 2).
         pattern=re.compile(
             r"\b(?:always|only)\s+use\s+this\b[^.\n]{0,60}?"
-            r"\b(?:instead|rather\s+than|over|first|for\s+all)\b",
+            r"\b(?:instead\s+of|rather\s+than|over|first|for\s+all)\b[^.\n]{0,40}?"
+            r"\b(?:tools?|servers?|mcps?|built-?ins?|natives?|readers?|providers?)\b"
+            r"|\b(?:always|only)\s+use\s+this\b[^.\n]{0,60}?"
+            r"\b(?:instead|first)\b\s*[.,;]",
             _I,
         ),
         message="description steers the model to prefer this tool",
