@@ -322,4 +322,4 @@ def test_reported_version_matches_installed_metadata():
     from importlib.metadata import version
 
     result = run_frisk(*scan_args("benign", "--format", "json", "--no-lock"))
-    assert json.loads(result.stdout)["frisk_version"] == version("frisk")
+    assert json.loads(result.stdout)["frisk_version"] == version("mcp-frisk")

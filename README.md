@@ -138,6 +138,12 @@ uv tool install git+https://github.com/Realgagenichols/frisk
 git clone https://github.com/Realgagenichols/frisk.git && cd frisk && uv sync
 ```
 
+> **Not on PyPI yet.** The distribution will be **`mcp-frisk`** — the bare name `frisk` is
+> taken by an unrelated bioinformatics package — while the command and the import package
+> are both **`frisk`**. Same split as its sibling
+> [`mcp-tollbooth`](https://pypi.org/project/mcp-tollbooth/). Once published:
+> `pip install mcp-frisk`, or `uvx --from mcp-frisk frisk --help`.
+
 ## Quickstart
 
 ```bash

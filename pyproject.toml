@@ -1,5 +1,5 @@
 [project]
-name = "frisk"
+name = "mcp-frisk"
 version = "0.1.0"
 description = "Vet a third-party MCP server before you trust it: sandboxed connect-and-enumerate plus deterministic security detectors."
 readme = "README.md"
