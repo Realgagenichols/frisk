@@ -145,6 +145,10 @@ git clone https://github.com/Realgagenichols/frisk.git && cd frisk && uv sync
 # command; everything after the command is passed through to the server untouched.
 frisk scan npx -y @acme/weather-mcp
 
+# One of frisk's own flags after the command is an error, not a silent pass-through.
+# If the server really does take a colliding flag, put it after a bare --
+frisk scan npx -y @acme/weather-mcp -- --timeout 60
+
 # Machine-readable output for CI
 frisk scan --format json npx -y @acme/weather-mcp
 
@@ -162,6 +166,8 @@ frisk verify npx -y @acme/weather-mcp
 | `0` | clean — no findings above INFO |
 | `1` | warnings — LOW/MEDIUM findings |
 | `2` | HIGH/CRITICAL findings, drift on `verify`, or an operational error |
+
+`2` deliberately covers both "the server is dangerous" and "frisk could not assess it" — including an unexpected crash, which exits `2` rather than `1` so a failure can never read to CI as the milder "warnings" result.
 
 ## The honeypot
 
