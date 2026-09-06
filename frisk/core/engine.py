@@ -6,6 +6,8 @@ under Pyodide (R23).
 
 from __future__ import annotations
 
+import bisect
+from collections import defaultdict
 from typing import Protocol, runtime_checkable
 
 from frisk.core.models import Evidence, Finding, Inventory, Severity
@@ -72,23 +74,31 @@ def suppress_overlaps(findings: list[Finding]) -> list[Finding]:
         start, end = f.evidence.span  # type: ignore[misc]
         return (-f.severity, -(end - start), f.detector, start, f.evidence.category, f.message)
 
+    # Two levels of indexing, because an untrusted server chooses BOTH axes. Bucketing by
+    # (item_ref, field) alone still left the clash test quadratic inside one bucket, and one
+    # 2 MB description puts every finding in one bucket — measured at ~4x per doubling, which
+    # is minutes of CPU for a description a server can simply send. Within a bucket the kept
+    # spans are disjoint by construction, so they stay sorted by start and a binary search
+    # only has to look at the two neighbours.
+    kept_starts: dict[tuple[str, str], list[int]] = defaultdict(list)
+    kept_ends: dict[tuple[str, str], list[int]] = defaultdict(list)
     kept: list[Finding] = []
     for finding in sorted(spanned, key=precedence):
         span = finding.evidence.span
         assert span is not None
-        clashes = any(
-            k.item_ref == finding.item_ref
-            and k.field == finding.field
-            and _overlaps(k.evidence.span, span)  # type: ignore[arg-type]
-            for k in kept
+        start, end = span
+        key = (finding.item_ref, finding.field)
+        starts, ends = kept_starts[key], kept_ends[key]
+        index = bisect.bisect_left(starts, start)
+        clashes = (index > 0 and ends[index - 1] > start) or (
+            index < len(starts) and starts[index] < end
         )
         if not clashes:
+            starts.insert(index, start)
+            ends.insert(index, end)
             kept.append(finding)
 
     result = unspanned + kept
     result.sort(key=lambda f: (f.item_ref, f.field, f.evidence.span or (-1, -1), f.detector))
     return result
 
-
-def _overlaps(a: tuple[int, int], b: tuple[int, int]) -> bool:
-    return a[0] < b[1] and b[0] < a[1]

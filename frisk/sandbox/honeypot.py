@@ -21,6 +21,7 @@ values are fake, but report output must not train readers to expect credential m
 
 from __future__ import annotations
 
+import base64
 import os
 import secrets
 from dataclasses import dataclass
@@ -80,6 +81,7 @@ class DecoySet:
 
 def seed_decoys(fake_home: Path) -> DecoySet:
     """Plant decoy credentials under ``fake_home`` and record their stat baselines."""
+    fake_home.mkdir(parents=True, exist_ok=True)
     canary = secrets.token_hex(_CANARY_BYTES)
     subs = {"canary": canary, "canary_upper16": canary[:16].upper()}
     baselines: dict[str, DecoyBaseline] = {}
@@ -152,18 +154,43 @@ def inspect_decoys(decoys: DecoySet) -> list[Finding]:
     return findings
 
 
+def canary_tokens(canary: str) -> tuple[str, ...]:
+    """Every form the canary plausibly takes on the way out through the MCP channel.
+
+    A thief who reads a decoy rarely retypes the hex — they return the file, and returning a
+    file usually means base64. Base64 has three byte phases, and which one applies depends on
+    how many bytes precede the canary in the encoded blob, so all three are matched; the
+    contaminated character at each end of a phase fragment is trimmed. Upper/lower hex covers
+    a normaliser in the thief's path. Each fragment stays long enough (16+ chars of a
+    20-byte random token) that a chance match is not a real possibility (Pattern 12).
+    """
+    literal = (canary, canary.upper(), "AKIA" + canary[:16].upper())
+    fragments: list[str] = []
+    for token in (canary, canary.upper()):
+        raw = token.encode("utf-8")
+        for phase in range(3):
+            encoded = base64.b64encode(b"\x00" * phase + raw).decode("ascii")
+            # Drop the leading chars whose bits mix with the padding prefix, and the trailing
+            # group whose bits depend on whatever bytes follow the canary in the real blob.
+            fragment = encoded[(phase * 4) // 3 + 1 : -4]
+            if len(fragment) >= 16:
+                fragments.append(fragment)
+    return literal + tuple(fragments)
+
+
 def scan_for_canary(inventory: Inventory, decoys: DecoySet) -> list[Finding]:
     """Flag decoy credential material surfacing in the enumerated definitions (R24).
 
     Searches each item's ``raw_bytes`` — the canonical advertised JSON, in which an
     alphanumeric token survives JSON escaping verbatim (Pattern 12; the canary is pure hex,
-    which no JSON encoder transforms) — plus ``server_info`` string values. Two tokens: the full
-    canary, and the AKIA-prefixed key-id fragment (the AWS decoy's access-key-id carries
-    only the first 16 canary chars, and a thief may exfiltrate just the key id). Evidence is
+    which no JSON encoder transforms) — plus ``server_info`` string values. The token set is
+    ``canary_tokens``: the literal canary, its upper-case form, the AKIA-prefixed key-id
+    fragment (the AWS decoy's access-key-id carries only the first 16 canary chars, and a
+    thief may exfiltrate just the key id), and the base64 phase fragments of each. Evidence is
     category + offset only — the canary is fake, but report output never carries credential
     material (S3). One finding per item: first match wins.
     """
-    tokens = (decoys.canary, "AKIA" + decoys.canary[:16].upper())
+    tokens = canary_tokens(decoys.canary)
     message = "decoy credential material in advertised definition (exfiltration attempt)"
     findings: list[Finding] = []
     for item in inventory.items:

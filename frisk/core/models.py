@@ -36,6 +36,13 @@ class Item:
 
     `raw_bytes` is the advertised JSON for this item exactly as received — kept verbatim for
     lockfile hashing and offset-accurate evidence (never re-serialized before hashing).
+
+    `payload` is the **complete** advertised definition, and it — not the three named
+    attributes — is what detectors scan. MCP tools carry far more model-visible prose than
+    `description`: `title`, `annotations.title`, `outputSchema`, `icons`, `_meta`; resources
+    carry `uri` and `mimeType`. Retaining only the named fields let an attacker relocate a
+    payload one key over and score zero findings. `name` / `description` / `input_schema`
+    remain first-class because structural rules (D3, D4) index into them directly.
     """
 
     kind: ItemKind
@@ -43,11 +50,21 @@ class Item:
     description: str | None
     input_schema: dict[str, Any] | None
     raw_bytes: bytes
+    payload: dict[str, Any] = field(default_factory=dict)
 
     @property
     def ref(self) -> str:
-        """Stable human/lock reference, e.g. ``tool:get_weather``."""
-        return f"{self.kind}:{self.name}"
+        """Stable human/lock reference, e.g. ``tool:get_weather``.
+
+        A resource with no `name` takes its name from its `uri`, and a URI can embed a
+        password or an api-key query parameter — which the ref then carries into every
+        report line AND into `frisk.lock` on disk. Credentials are masked here, at the one
+        place every sink reads from (S3, Pattern 29). The hash is computed from `raw_bytes`,
+        not from the ref, so masking cannot weaken rug-pull detection.
+        """
+        from frisk.core.sanitize import redact_url_secrets
+
+        return f"{self.kind}:{redact_url_secrets(self.name)}"
 
 
 @dataclass
@@ -91,18 +108,46 @@ class Finding:
 
 
 def iter_string_leaves(item: Item) -> Iterator[tuple[str, str]]:
-    """Yield ``(field_path, raw_str)`` for every string in an item.
+    """Yield ``(field_path, raw_str)`` for every string the server advertised for this item.
 
-    Walks ``name``, ``description``, and every string (both property key names and values) in
-    ``input_schema``. Yields the **raw** strings — tabs, newlines, quotes and hidden characters
-    intact — so detectors scan the representation their patterns were written for, never a
-    ``json.dumps`` blob whose escaping would change match semantics (cross-cutting Pattern 12).
+    ``name`` and ``description`` are yielded first under their bare paths (stable references
+    that predate the payload walk); every remaining payload key is then walked, so
+    ``title``, ``annotations.title``, ``outputSchema``, ``uri``, ``icons[0].src`` and
+    ``_meta`` are all scanned. There is no field allowlist to fall behind the MCP schema:
+    whatever the server sends, a detector sees.
+
+    Yields the **raw** strings — tabs, newlines, quotes and hidden characters intact — so
+    detectors scan the representation their patterns were written for, never a ``json.dumps``
+    blob whose escaping would change match semantics (cross-cutting Pattern 12).
     """
     yield ("name", item.name)
     if item.description is not None:
         yield ("description", item.description)
-    if item.input_schema is not None:
+    for key in sorted(item.payload):
+        if key in _PAYLOAD_KEYS_SCANNED_ELSEWHERE:
+            continue
+        # `arguments` is a prompt's scan surface only because ingest projects it into the
+        # synthetic `inputSchema` below. On a TOOL or RESOURCE no such projection exists, so
+        # skipping the key there would leave it entirely unscanned — and the SDK models are
+        # `extra="allow"`, so a server can put one on any item kind.
+        if key == "arguments" and item.kind is ItemKind.PROMPT:
+            continue
+        value = item.payload[key]
+        # A resource with no `name` takes its name from `uri` (ingest.resource_item), which
+        # would then be scanned once as `name` and again as `uri` — two identical findings
+        # and a doubled risk score. Any payload string already yielded verbatim is skipped.
+        if isinstance(value, str) and value in (item.name, item.description):
+            continue
+        yield from _walk(key, value)
+    if item.input_schema is not None and "inputSchema" not in item.payload:
+        # A prompt's schema is ingest's projection of `arguments`, not a payload key of its
+        # own; so is the schema of an Item constructed directly rather than through ingest.
         yield from _walk("inputSchema", item.input_schema)
+
+
+# `name`/`description` are emitted above under their bare paths — walking them again would
+# double-report every finding in them.
+_PAYLOAD_KEYS_SCANNED_ELSEWHERE = frozenset({"name", "description"})
 
 
 def _walk(path: str, node: Any) -> Iterator[tuple[str, str]]:

@@ -45,6 +45,7 @@ def tool_item(payload: dict[str, Any]) -> Item:
         description=_opt_str(payload, "description", "tool", name),
         input_schema=_opt_dict(payload, "inputSchema", "tool", name),
         raw_bytes=canonical_bytes(payload),
+        payload=payload,
     )
 
 
@@ -58,12 +59,16 @@ def resource_item(payload: dict[str, Any]) -> Item:
         description=_opt_str(payload, "description", "resource", name),
         input_schema=None,
         raw_bytes=canonical_bytes(payload),
+        payload=payload,
     )
 
 
 def prompt_item(payload: dict[str, Any]) -> Item:
     name = _require_name(payload, "prompt")
-    # Expose prompt arguments as a schema so D1/D3 scan their names + descriptions too.
+    # Project prompt arguments into a schema so the structural rules (D3, D4) that index into
+    # `properties` cover prompts too. Every argument key except `name` is carried through, so
+    # this projection is the argument's COMPLETE scan surface — `iter_string_leaves` then
+    # skips the raw `arguments` list, which would otherwise report each argument twice.
     arguments = payload.get("arguments") or []
     if not isinstance(arguments, list):
         raise IngestError(f"prompt {name!r}: 'arguments' must be a list")
@@ -71,10 +76,14 @@ def prompt_item(payload: dict[str, Any]) -> Item:
     for index, arg in enumerate(arguments):
         if not isinstance(arg, dict) or not isinstance(arg.get("name"), str):
             raise IngestError(f"prompt {name!r}: argument [{index}] needs a 'name' string")
-        description = arg.get("description")
-        properties[arg["name"]] = {
+        # Two arguments may share a name. Keying the projection on the name alone let the
+        # second silently overwrite the first, so a poisoned argument disappeared entirely
+        # when a benign namesake followed it — the projection has to be lossless, because
+        # `iter_string_leaves` skips the raw list on the strength of that claim.
+        key = arg["name"] if arg["name"] not in properties else f"{arg['name']}[{index}]"
+        properties[key] = {
             "type": "string",
-            **({"description": description} if description else {}),
+            **{k: v for k, v in arg.items() if k != "name"},
         }
     schema = {"type": "object", "properties": properties} if properties else None
     return Item(
@@ -83,6 +92,7 @@ def prompt_item(payload: dict[str, Any]) -> Item:
         description=_opt_str(payload, "description", "prompt", name),
         input_schema=schema,
         raw_bytes=canonical_bytes(payload),
+        payload=payload,
     )
 
 

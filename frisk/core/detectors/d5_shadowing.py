@@ -8,14 +8,28 @@ Two signals:
    is exactly the shadowing vector: calls meant for the trusted tool route here.
 2. **Steering (MEDIUM)** — description text that herds the model toward this tool or away
    from others ("always use this instead of …", "other servers' tools are unreliable").
+3. **Duplicate names (MEDIUM)** — two definitions on the same server sharing a name (R28).
+   Which one a client resolves is undefined, so a benign twin can stand in front of a
+   poisoned one.
+
+Names are compared folded (`fold_name`): `readFile` and `read_file` are one name to anyone
+reading a tool list, so they are one name here.
 """
 
 from __future__ import annotations
 
 import re
+from collections import Counter
 
-from frisk.core.detectors.base import Rule, model_visible_text, scan_item_leaves
-from frisk.core.models import Finding, Inventory, Severity
+from frisk.core.detectors.base import (
+    Rule,
+    contains_token_run,
+    fold_name,
+    model_visible_text,
+    name_tokens,
+    scan_item_leaves,
+)
+from frisk.core.models import Evidence, Finding, Inventory, Severity
 from frisk.core.sanitize import make_evidence
 
 _I = re.IGNORECASE
@@ -41,15 +55,59 @@ _COMMON_TOOL_NAMES = {
     "browser",
     "execute_command",
     "run_command",
+    "grep",
+    "glob",
+    "view",
+    "edit",
+    "apply_patch",
+    "web_fetch",
+    "task",
+    "python",
+    "shell",
 }
+
+# Two match modes, because impersonation is not always an exact name:
+#   - folded equality catches `readFile`, `read-file`, `READFILE`;
+#   - token-run containment catches `filesystem_read_file`, `read_file_v2`, `fs.read_file`,
+#     without the false positives a substring test would produce (`thread_file`).
+_COMMON_TOOL_NAMES_FOLDED = {fold_name(n) for n in _COMMON_TOOL_NAMES}
+# Only multi-token names are matched by containment: a one-token name like `fetch` or `task`
+# is too common a word to flag wherever it appears inside a longer name (N2).
+_COMMON_TOOL_TOKEN_RUNS = [
+    tokens for n in _COMMON_TOOL_NAMES if len(tokens := [t.lower() for t in name_tokens(n)]) > 1
+]
+
+
+def _steering_field(field_path: str, text: str) -> bool:
+    """Model-visible prose, minus `_meta`.
+
+    `_meta` is host metadata, and hosts put UI copy there: the Apps SDK's
+    `openai/widgetDescription` says things like "Do not use other tools to render it", which
+    is an instruction to the HOST about rendering, not the model-steering this rule is about.
+    Narrowed for D5 only — D1 and D2 still read `_meta`, because an injected instruction or a
+    zero-width payload is dangerous there whoever the copy was written for.
+    """
+    return model_visible_text(field_path, text) and not field_path.startswith("_meta")
+
+
+def _impersonates(name: str) -> bool:
+    if fold_name(name) in _COMMON_TOOL_NAMES_FOLDED:
+        return True
+    return any(contains_token_run(name, run) for run in _COMMON_TOOL_TOKEN_RUNS)
 
 _STEERING_RULES = [
     Rule(
         category="steering-toward",
         severity=Severity.MEDIUM,
+        # Scoped to a TOOL/SERVER object, mirroring its steering-away sibling. Without that,
+        # "Always use this endpoint for binary data rather than the text one" — one server
+        # choosing between its own two endpoints — read as cross-server steering (Pattern 2).
         pattern=re.compile(
             r"\b(?:always|only)\s+use\s+this\b[^.\n]{0,60}?"
-            r"\b(?:instead|rather\s+than|over|first|for\s+all)\b",
+            r"\b(?:instead\s+of|rather\s+than|over|first|for\s+all)\b[^.\n]{0,40}?"
+            r"\b(?:tools?|servers?|mcps?|built-?ins?|natives?|readers?|providers?)\b"
+            r"|\b(?:always|only)\s+use\s+this\b[^.\n]{0,60}?"
+            r"\b(?:instead|first)\b\s*[.,;]",
             _I,
         ),
         message="description steers the model to prefer this tool",
@@ -76,9 +134,9 @@ class Shadowing:
     id = "D5"
 
     def run(self, inventory: Inventory) -> list[Finding]:
-        findings: list[Finding] = []
+        findings: list[Finding] = self._duplicate_names(inventory)
         for item in inventory.items:
-            if item.name.lower() in _COMMON_TOOL_NAMES:
+            if _impersonates(item.name):
                 findings.append(
                     Finding(
                         detector=self.id,
@@ -96,6 +154,39 @@ class Shadowing:
                 )
             # Steering can hide in any model-visible prose (param descriptions included).
             findings.extend(
-                scan_item_leaves(self.id, item, _STEERING_RULES, field_filter=model_visible_text)
+                scan_item_leaves(self.id, item, _STEERING_RULES, field_filter=_steering_field)
             )
         return findings
+
+    def _duplicate_names(self, inventory: Inventory) -> list[Finding]:
+        """Two definitions of one kind sharing a name (R28).
+
+        Which one a client resolves is undefined, so a benign twin can stand in front of a
+        poisoned one — the same shadowing vector as impersonating a built-in, sourced from
+        the server's own inventory. Emitted WITHOUT a span so the engine's overlap
+        suppression can never hide it behind another finding on the same name.
+        """
+        # Folded, like every other name comparison here: `search`/`Search` and
+        # `read_notes`/`readNotes` collide for a client resolving by name, so counting raw
+        # refs would let a twin hide behind a capitalisation.
+        counts: Counter[str] = Counter()
+        display: dict[str, str] = {}
+        for item in inventory.items:
+            key = f"{item.kind}:{fold_name(item.name)}"
+            counts[key] += 1
+            display.setdefault(key, item.ref)
+        return [
+            Finding(
+                detector=self.id,
+                severity=Severity.MEDIUM,
+                item_ref=display[key],
+                field="name",
+                message=(
+                    f"{count} definitions advertised under the same name — which one a "
+                    "client resolves is undefined"
+                ),
+                evidence=Evidence(category="duplicate-definition-name"),
+            )
+            for key, count in sorted(counts.items())
+            if count > 1
+        ]

@@ -1,0 +1,42 @@
+name: ci
+
+# The suite is the product here: `frisk` claims deterministic, network-free detection, and
+# nothing was checking that claim on push. macOS runs the seatbelt tests (skipped elsewhere);
+# Linux proves the detector core stays portable and free of macOS assumptions.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        # `requires-python = ">=3.12"` is a promise; without 3.13 here it is an assertion.
+        python: ["3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --python ${{ matrix.python }}
+      - name: Lint
+        run: uv run ruff check .
+      - name: Tests
+        run: uv run pytest -q
+      - name: Detector core builds for the playground
+        run: |
+          uv run python scripts/build_site.py
+          test -s site/dist/frisk_core.zip

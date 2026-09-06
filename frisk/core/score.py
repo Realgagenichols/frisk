@@ -22,6 +22,13 @@ WEIGHTS: dict[Severity, int] = {
 
 MAX_SCORE = 100
 
+# A server can reach a saturated 100/100 on MEDIUMs alone and still be called `warn`, because
+# the verdict read only the single highest severity. Six tools impersonating built-in names,
+# each soliciting credentials and conversation history, is not a warning. The threshold is set
+# where accumulated risk is unarguable and far above anything honest: the full benign corpus
+# scores 0, and the worst realistic benign server measured scores 10.
+FAIL_SCORE = 50
+
 
 @dataclass(frozen=True)
 class Assessment:
@@ -36,10 +43,10 @@ def assess(findings: list[Finding]) -> Assessment:
     highest = max((f.severity for f in findings), default=None)
     if highest is None or highest is Severity.INFO:
         verdict = "pass"
-    elif highest <= Severity.MEDIUM:
-        verdict = "warn"
-    else:
+    elif highest > Severity.MEDIUM or score >= FAIL_SCORE:
         verdict = "fail"
+    else:
+        verdict = "warn"
     return Assessment(score=score, verdict=verdict, highest=highest)
 
 

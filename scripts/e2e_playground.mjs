@@ -11,6 +11,14 @@
 // renders and scans). Visibility asserted with isVisible()-style checks, not attributes.
 import { chromium } from "playwright";
 
+// Fail loud rather than writing screenshots to a directory literally named "undefined",
+// which is what an omitted argument used to produce.
+const SHOTS = process.argv[2];
+if (!SHOTS) {
+  console.error("usage: node scripts/e2e_playground.mjs <screenshot-dir>");
+  process.exit(2);
+}
+
 const BASE = "http://127.0.0.1:8912/";
 const browser = await chromium.launch();
 const page = await browser.newPage();
@@ -48,7 +56,7 @@ const detectors = await page.$$eval(".finding-ref",
   (els) => [...new Set(els.map((e) => e.textContent.replace(/^ref /, "")))].sort());
 console.log("poisoned: DENIED,", failScore.trim(), "detectors:", detectors.join(","));
 await page.waitForTimeout(900); // let stamp/row animations settle — screenshots show the final state
-await page.screenshot({ path: process.argv[2] + "/playground-poisoned.png", fullPage: true });
+await page.screenshot({ path: SHOTS + "/playground-poisoned.png", fullPage: true });
 
 // Benign example → CLEARED stamp on class .pass (R26), clean note
 await page.click("#load-benign");
@@ -60,7 +68,7 @@ const clean = page.locator(".clean-note");
 console.log("benign: CLEARED, clean-note:", (await clean.isVisible()) ? "present" : "MISSING");
 if (!(await clean.isVisible())) throw new Error("clean-note not visible on benign scan");
 await page.waitForTimeout(900);
-await page.screenshot({ path: process.argv[2] + "/playground-benign.png", fullPage: true });
+await page.screenshot({ path: SHOTS + "/playground-benign.png", fullPage: true });
 
 // Crafted medium-severity paste → warn verdict → ADDITIONAL SCREENING on class .warn (R26)
 const warnPaste = JSON.stringify({ tools: [{
@@ -117,7 +125,7 @@ await page.click("#scan-btn");
 await page.waitForSelector("#error-banner:not([hidden])", { timeout: 5000 });
 if (!(await page.locator("#error-banner").isVisible())) throw new Error("error banner not visible");
 console.log("malformed: error banner =", JSON.stringify((await page.textContent("#error-text")).slice(0, 60)));
-await page.screenshot({ path: process.argv[2] + "/playground-malformed.png", fullPage: true });
+await page.screenshot({ path: SHOTS + "/playground-malformed.png", fullPage: true });
 
 // XSS probe: hostile tool name/description must render inert (R15 analog)
 const hostile = JSON.stringify({ tools: [{
@@ -177,7 +185,7 @@ if (blockedFontRequests === 0) {
 }
 console.log("font-fallback: blocked", blockedFontRequests, "font request(s); scan completed");
 await fallbackPage.waitForTimeout(900);
-await fallbackPage.screenshot({ path: process.argv[2] + "/playground-font-blocked.png", fullPage: true });
+await fallbackPage.screenshot({ path: SHOTS + "/playground-font-blocked.png", fullPage: true });
 await fallbackPage.close();
 
 await browser.close();

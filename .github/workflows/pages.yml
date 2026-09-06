@@ -19,7 +19,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The playground ships the detector core to users' browsers, so it does not deploy from a
+  # red suite. Duplicated rather than reached across workflows: `needs` cannot span them, and
+  # a deploy gated on a job it cannot see is a gate in name only.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: github-pages

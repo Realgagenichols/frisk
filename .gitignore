@@ -16,7 +16,9 @@ package-lock.json
 # Env / OS
 .env
 .DS_Store
-# frisk runtime artifacts
+# frisk runtime artifacts. NOTE: this ignores the lockfiles produced while developing
+# frisk itself. In a repo that CONSUMES frisk, commit your frisk.lock — the baseline is the
+# whole point of `frisk verify`, and an ignored one silently detects nothing.
 frisk.lock
 # AI workflow artifacts (local only, not part of the published repo)
 CLAUDE.md

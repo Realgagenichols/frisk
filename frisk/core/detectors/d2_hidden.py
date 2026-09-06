@@ -16,9 +16,22 @@ import unicodedata
 from frisk.core.models import Evidence, Finding, Inventory, Severity, iter_string_leaves
 from frisk.core.sanitize import c0_escape, char_span_to_byte_span
 
-_ZERO_WIDTH = re.compile(r"[\u200b\u200c\u200d\u2060\ufeff]+")
+# Invisible / default-ignorable characters, not just the five best-known ones: an audit
+# measured U+00AD, U+034F, U+180E, the invisible math operators, the Hangul fillers, the
+# variation selectors and the braille blank all passing through, and every one of them
+# renders as nothing while the model still reads it.
+#
+# U+FE0F is deliberately EXCLUDED from the variation-selector range: it is the emoji
+# presentation selector, so including it would flag every ordinary emoji (N2).
+# Always \uXXXX escapes, never literals - a literal here is unreviewable (tasks/lessons.md).
+_ZERO_WIDTH = re.compile(
+    r"[\u00ad\u034f\u115f\u1160\u180e\u200b\u200c\u200d\u2060\u2061\u2062\u2063\u2064"
+    r"\u206a-\u206f\u2800\u3164\ufe00-\ufe0e\ufeff\uffa0]+"
+)
 _TAG_CHARS = re.compile(r"[\U000e0000-\U000e007f]+")
-_BIDI = re.compile(r"[\u202a-\u202e\u2066-\u2069]+")
+# LRM/RLM/ALM (U+200E/200F/061C) are direction controls, so they belong with the overrides
+# rather than with the zero-width run - same spoofing family, same message.
+_BIDI = re.compile(r"[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]+")
 _ANSI = re.compile(r"\x1b\[[0-9;:?]*[ -/]*[@-~]|\x9b[0-9;:?]*[ -/]*[@-~]|\x1b|\x9b")
 _LINE_SEP = re.compile(r"[\u2028\u2029\u0085]+")
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)

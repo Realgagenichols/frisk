@@ -50,7 +50,8 @@ def test_mutated_mode_differs_from_benign_in_one_description():
 
 
 def test_exit_handshake_mode_fails_before_initialize():
-    with pytest.raises(BaseException):  # noqa: B017,PT011 — MCP raises an ExceptionGroup
+    # Narrowed from BaseException, which also passed on an ImportError or a typo in the test.
+    with pytest.raises(BaseExceptionGroup):
         anyio.run(_enumerate, "exit-handshake")
 
 

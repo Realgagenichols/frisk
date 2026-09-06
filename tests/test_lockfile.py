@@ -30,8 +30,9 @@ def test_write_then_read_round_trips(tmp_path):
     inventory = inv(item("a"), item("b"))
     write_lock(lock_path, inventory)
     locked = read_lock(lock_path)
-    assert set(locked) == {"tool:a", "tool:b"}
-    assert locked["tool:a"] == hash_item(item("a"))
+    # An ordered list of (hash, ref) pairs, not a dict: a dict silently drops duplicate refs.
+    assert [ref for _, ref in locked] == ["tool:a", "tool:b"]
+    assert dict((ref, digest) for digest, ref in locked)["tool:a"] == hash_item(item("a"))
 
 
 def test_unchanged_inventory_shows_no_drift(tmp_path):
@@ -99,4 +100,4 @@ def test_name_with_raw_newline_cannot_forge_a_second_entry(tmp_path):
     write_lock(lock_path, inv(item("a\nb\tc")))
     locked = read_lock(lock_path)
     assert len(locked) == 1  # one entry, not two
-    assert "\\x0a" in next(iter(locked))  # newline visibly escaped
+    assert "\\x0a" in locked[0][1]  # newline visibly escaped

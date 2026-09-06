@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 
+from frisk.core.detectors.base import fold_name, iter_schema_properties
 from frisk.core.models import Finding, Inventory, Item, Severity
 from frisk.core.sanitize import make_evidence
 
@@ -23,7 +24,9 @@ _I = re.IGNORECASE
 class _Capability:
     def __init__(self, name: str, param_names: set[str], desc_pattern: str, purpose: str):
         self.name = name
-        self.param_names = param_names
+        # Folded so `callbackUrl` matches the listed `callback_url` (and `filePath`,
+        # `FileName`, …) — MCP schemas use camelCase as often as snake_case.
+        self.param_names = {fold_name(p) for p in param_names}
         self.desc_pattern = re.compile(desc_pattern, _I)
         self.purpose_pattern = re.compile(purpose, _I)
 
@@ -84,16 +87,13 @@ class ScopeMismatch:
                 )
             )
 
-        # Signal 1: capability param without a declared matching purpose (MEDIUM).
-        props = (item.input_schema or {}).get("properties")
-        if not isinstance(props, dict):
-            return findings
-        for prop_name, spec in props.items():
-            spec = spec if isinstance(spec, dict) else {}
+        # Signal 1: capability param without a declared matching purpose (MEDIUM). Walks
+        # nested properties too — burying a `command` under `options` is not a declaration.
+        for prop_path, prop_name, spec in iter_schema_properties(item.input_schema or {}):
             prop_desc = spec.get("description", "")
             prop_desc = prop_desc if isinstance(prop_desc, str) else ""
             for cap in _CAPABILITIES:
-                requests_cap = prop_name.lower() in cap.param_names or cap.desc_pattern.search(
+                requests_cap = fold_name(prop_name) in cap.param_names or cap.desc_pattern.search(
                     prop_desc
                 )
                 if requests_cap and not cap.purpose_pattern.search(purpose_text):
@@ -102,7 +102,7 @@ class ScopeMismatch:
                             detector=self.id,
                             severity=Severity.MEDIUM,
                             item_ref=item.ref,
-                            field=f"inputSchema.properties.{prop_name}#key",
+                            field=f"{prop_path}#key",
                             message=(
                                 f'tool requests {cap.name} capability via "{prop_name}" but its '
                                 f"stated purpose never mentions {cap.name}"
