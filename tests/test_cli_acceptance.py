@@ -462,3 +462,81 @@ def test_unreadable_config_fails_loudly(tmp_path):
     result = run_frisk("scan", "--no-lock", "--config", str(tmp_path / "missing.json"))
     assert result.returncode == 2
     assert "cannot read config" in result.stderr
+
+
+def test_config_baseline_does_not_leak_acceptance_between_servers(tmp_path):
+    """Two config entries running the SAME poisoned server: accepting the findings under one
+    name must not accept them under the other. Before the key was server-scoped it did."""
+    baseline = tmp_path / "baseline.json"
+    both = _write_config(
+        tmp_path, alpha=_fixture_server("poisoned"), beta=_fixture_server("poisoned")
+    )
+    only_alpha = tmp_path / "alpha.json"
+    only_alpha.write_text(
+        json.dumps({"mcpServers": {"alpha": _fixture_server("poisoned")}}), encoding="utf-8"
+    )
+    # Accept everything for `alpha` only.
+    run_frisk("scan", "--no-lock", "--quiet", "--config", str(only_alpha),
+              "--write-baseline", str(baseline))
+    entries = json.loads(baseline.read_text())["findings"]
+    assert {e["server"] for e in entries} == {"alpha"}
+
+    result = run_frisk("scan", "--no-lock", "--quiet", "--config", str(both),
+                       "--format", "json", "--baseline", str(baseline))
+    doc = json.loads(result.stdout)
+    by_name = {s["name"]: s for s in doc["servers"]}
+    assert by_name["alpha"]["findings"] == [], "alpha's findings were accepted"
+    assert by_name["beta"]["findings"], "beta must NOT inherit alpha's acceptance"
+    assert result.returncode == 2
+
+
+def test_config_json_keeps_every_server_distinguishable(tmp_path):
+    config = _write_config(
+        tmp_path,
+        good=_fixture_server("benign"),
+        bad=_fixture_server("poisoned"),
+        dead={"command": "/nonexistent/frisk-no-such-server"},
+        off={**_fixture_server("benign"), "disabled": True},
+    )
+    result = run_frisk(
+        "scan", "--no-lock", "--quiet", "--format", "json", "--config", str(config)
+    )
+    assert result.returncode == 2
+    # `--quiet` silences FRISK's warnings. The dead server's own exec failure still reaches
+    # stderr because it is the child's output, not ours — swallowing it would hide the very
+    # diagnostic someone needs. stdout stays pure JSON either way, which is what piping needs.
+    assert "warning:" not in result.stderr
+    doc = json.loads(result.stdout)
+    status = {s["name"]: s["status"] for s in doc["servers"]}
+    assert status == {"good": "scanned", "bad": "scanned", "dead": "error", "off": "disabled"}
+    by_name = {s["name"]: s for s in doc["servers"]}
+    # A flat merge could not say which server was which, nor that one was never assessed.
+    assert by_name["good"]["verdict"] == "pass" and by_name["bad"]["verdict"] == "fail"
+    assert by_name["dead"]["error"]
+    assert doc["verdict"] == "fail" and doc["servers_failed"] == 1
+
+
+def test_config_sarif_is_one_run_anchored_in_the_config_file(tmp_path):
+    config = _write_config(
+        tmp_path,
+        good=_fixture_server("benign"),
+        bad=_fixture_server("poisoned"),
+        dead={"command": "/nonexistent/frisk-no-such-server"},
+    )
+    result = run_frisk(
+        "scan", "--no-lock", "--quiet", "--format", "sarif", "--config", str(config)
+    )
+    assert result.returncode == 2
+    assert "warning:" not in result.stderr
+    doc = json.loads(result.stdout)
+    assert len(doc["runs"]) == 1
+    run = doc["runs"][0]
+    # Every result must carry a location or GitHub rejects the whole upload.
+    assert run["results"] and all("locations" in r for r in run["results"])
+    assert all(
+        r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == str(config)
+        for r in run["results"]
+    )
+    assert any(r["ruleId"] == "frisk/scan-error" for r in run["results"])
+    servers = {r["properties"]["server"] for r in run["results"]}
+    assert servers == {"good", "bad", "dead"}

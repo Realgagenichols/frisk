@@ -190,13 +190,22 @@ tool is never suppressed, which is the whole point. Accepted findings are still 
 marked as accepted; entries that stop matching anything are flagged as stale.
 
 ```yaml
-# .github/workflows/frisk.yml
+# .github/workflows/frisk.yml — vet every server your repo's .mcp.json declares
 - run: uvx --from mcp-frisk frisk scan --format sarif --quiet
-        --baseline frisk-baseline.json npx -y @acme/weather-mcp > frisk.sarif
+        --baseline frisk-baseline.json --config .mcp.json > frisk.sarif
   continue-on-error: true
 - uses: github/codeql-action/upload-sarif@v3
   with: { sarif_file: frisk.sarif }
 ```
+
+Findings are anchored at the line of `.mcp.json` that declares the offending server, so the
+annotation lands where the fix goes — deleting or pinning that entry. A server that fails to
+enumerate is reported as an error result rather than contributing nothing, because a server
+nobody could assess is not a clean one.
+
+> **SARIF needs a location that exists in your checkout.** `--config` anchors on the config
+> file, so point it at a committed `.mcp.json` rather than
+> `~/Library/Application Support/Claude/...`. Single-target scans anchor on the `--lock` path.
 
 ### Options
 

@@ -208,3 +208,57 @@ def test_default_threshold_is_the_original_contract():
 def test_parse_fail_on_rejects_nonsense():
     with pytest.raises(ValueError, match="unknown severity"):
         parse_fail_on("catastrophic")
+
+
+# ── server scoping: the cross-server suppression hole (R33 + R36) ──────────
+
+
+def test_accepting_a_finding_on_one_server_does_not_accept_it_on_another():
+    """Two config entries advertising the same poisoned `search` tool produce an identical
+    unscoped key, so accepting one silently accepted the other. They are two installations,
+    each fixed by uninstalling a different server."""
+    f = finding()
+    base = Baseline(keys=frozenset({finding_key(f, "server-a")}))
+    assert apply_baseline([f], base, server="server-a").gating == []
+    assert apply_baseline([f], base, server="server-b").gating == [f]
+
+
+def test_single_target_baselines_are_unscoped_and_still_load():
+    """A baseline written by `frisk scan <target>` has no server, and must keep working —
+    adding the field cannot invalidate every baseline already committed."""
+    written = render_baseline([finding()])
+    assert json.loads(written)["findings"][0]["server"] == ""
+    assert apply_baseline([finding()], load_baseline(written)).gating == []
+
+
+def test_a_v1_baseline_without_a_server_field_still_loads():
+    legacy = json.dumps(
+        {
+            "version": 1,
+            "findings": [
+                {
+                    "detector": "D5",
+                    "item": "tool:read_file",
+                    "field": "name",
+                    "category": "common-name-impersonation",
+                }
+            ],
+        }
+    )
+    assert apply_baseline([finding()], load_baseline(legacy)).gating == []
+
+
+def test_stale_is_scoped_to_the_server_being_scanned():
+    """Another server's entries are not stale just because this scan did not match them —
+    'absent' is a claim about the query you ran (Pattern 27)."""
+    mine = finding_key(finding(), "server-a")
+    theirs = finding_key(finding(), "server-b")
+    base = Baseline(keys=frozenset({mine, theirs}))
+    result = apply_baseline([], base, server="server-a")
+    assert result.stale == [mine]
+
+
+def test_write_baseline_accepts_server_tagged_pairs():
+    written = render_baseline([("alpha", finding()), ("beta", finding())])
+    servers = {e["server"] for e in json.loads(written)["findings"]}
+    assert servers == {"alpha", "beta"}

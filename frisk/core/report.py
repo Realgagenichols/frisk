@@ -37,7 +37,7 @@ def render_human(
     assessment: Assessment,
     *,
     accepted: list[Finding] | None = None,
-    stale: list[tuple[str, str, str, str]] | None = None,
+    stale: list[tuple[str, ...]] | None = None,
     fail_on: str | None = None,
 ) -> str:
     lines: list[str] = []
@@ -102,10 +102,11 @@ def render_human(
             f"stale baseline entries ({len(stale)}) — accepted, but no longer present. "
             "Remove them so the baseline keeps meaning something:"
         )
-        for detector, item_ref, field_path, category in stale:
+        for server, detector, item_ref, field_path, category in stale:
+            where = f"{c0_escape(server)} / " if server else ""
             lines.append(
-                f"  {c0_escape(detector)} — {c0_escape(item_ref)} · {c0_escape(field_path)} "
-                f"({c0_escape(category)})"
+                f"  {where}{c0_escape(detector)} — {c0_escape(item_ref)} · "
+                f"{c0_escape(field_path)} ({c0_escape(category)})"
             )
     return "\n".join(lines) + "\n"
 
@@ -132,7 +133,7 @@ def render_json(
     assessment: Assessment,
     *,
     accepted: list[Finding] | None = None,
-    stale: list[tuple[str, str, str, str]] | None = None,
+    stale: list[tuple[str, ...]] | None = None,
     fail_on: str | None = None,
 ) -> str:
     doc = {
@@ -150,7 +151,8 @@ def render_json(
             )
         ],
         "stale_baseline_entries": [
-            {"detector": d, "item": i, "field": f, "category": c} for d, i, f, c in (stale or [])
+            {"server": srv, "detector": d, "item": i, "field": f, "category": c}
+            for srv, d, i, f, c in (stale or [])
         ],
         "findings": [
             _finding_doc(f)

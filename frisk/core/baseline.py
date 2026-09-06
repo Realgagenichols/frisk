@@ -34,16 +34,33 @@ from frisk.core.models import Finding
 
 BASELINE_VERSION = 1
 
-FindingKey = tuple[str, str, str, str]
+# (server, detector, item, field, category). `server` is "" for a single-target scan, so a
+# baseline written by `frisk scan <target>` keeps working unchanged; under `--config` it is
+# the CONFIG KEY, which scopes acceptance to one server.
+FindingKey = tuple[str, str, str, str, str]
 
 
 class BaselineError(Exception):
     """A malformed or unreadable baseline file. The message names the exact problem."""
 
 
-def finding_key(finding: Finding) -> FindingKey:
-    """The stable identity of a finding across rewordings and offset churn."""
-    return (finding.detector, finding.item_ref, finding.field, finding.evidence.category)
+def finding_key(finding: Finding, server: str = "") -> FindingKey:
+    """The stable identity of a finding across rewordings and offset churn.
+
+    ``server`` scopes the key to one entry of a client config. Without it, two servers that
+    both advertise a poisoned `search` tool produce an identical key, so accepting the
+    finding on one silently accepts it on the other — and two installations of the same bad
+    tool are two separate trust decisions, each fixed by uninstalling a different server.
+    Use the config KEY, never `serverInfo.name`: the latter is attacker-controlled, so two
+    hostile entries could both claim to be "github-mcp" and launder each other's acceptance.
+    """
+    return (
+        server,
+        finding.detector,
+        finding.item_ref,
+        finding.field,
+        finding.evidence.category,
+    )
 
 
 @dataclass(frozen=True)
@@ -61,7 +78,9 @@ class BaselineResult:
     stale: list[FindingKey] = field(default_factory=list)  # in the baseline, not in the scan
 
 
-def apply_baseline(findings: list[Finding], baseline: Baseline) -> BaselineResult:
+def apply_baseline(
+    findings: list[Finding], baseline: Baseline, *, server: str = ""
+) -> BaselineResult:
     """Split findings into gating and accepted, and report entries that matched nothing.
 
     Stale entries are surfaced rather than ignored: an accepted finding that has since been
@@ -71,30 +90,41 @@ def apply_baseline(findings: list[Finding], baseline: Baseline) -> BaselineResul
     result = BaselineResult()
     matched: set[FindingKey] = set()
     for finding in findings:
-        key = finding_key(finding)
+        key = finding_key(finding, server)
         if key in baseline.keys:
             result.accepted.append(finding)
             matched.add(key)
         else:
             result.gating.append(finding)
-    result.stale = sorted(baseline.keys - matched)
+    # Only entries for THIS server can be judged stale by this scan; another server's
+    # entries are simply not in scope here (Pattern 27 — "absent" is a claim about the query
+    # you ran). The caller aggregates across servers.
+    in_scope = {k for k in baseline.keys if k[0] == server}
+    result.stale = sorted(in_scope - matched)
     return result
 
 
-def render_baseline(findings: list[Finding], *, note: str | None = None) -> str:
+def render_baseline(
+    findings: list[Finding] | list[tuple[str, Finding]], *, note: str | None = None
+) -> str:
     """Serialize accepted findings. Deterministic: this file is meant to be committed, and a
     baseline that reorders itself on every write is unreviewable in a diff.
 
     No timestamp, for the same reason — git already records when it changed, and a churning
     header trains reviewers to skim past the part that matters.
     """
-    entries = sorted({finding_key(f) for f in findings})
+    # Accepts bare findings (single target) or (server, finding) pairs (--config).
+    keys = {
+        finding_key(f[1], f[0]) if isinstance(f, tuple) else finding_key(f) for f in findings
+    }
+    entries = sorted(keys)
     doc: dict[str, Any] = {
         "version": BASELINE_VERSION,
         "note": note
         or "Findings reviewed and accepted. Delete an entry to start failing on it again.",
         "findings": [
-            {"detector": d, "item": i, "field": f, "category": c} for d, i, f, c in entries
+            {"server": srv, "detector": d, "item": i, "field": f, "category": c}
+            for srv, d, i, f, c in entries
         ],
     }
     return json.dumps(doc, indent=2, ensure_ascii=True, sort_keys=False) + "\n"
@@ -125,7 +155,15 @@ def load_baseline(text: str) -> Baseline:
         if not isinstance(entry, dict):
             raise BaselineError(f"findings[{index}] must be an object")
         try:
-            key = (entry["detector"], entry["item"], entry["field"], entry["category"])
+            key = (
+                # `server` is optional so a v1-era baseline (single target, no server) still
+                # loads: an absent server means the unscoped single-target key.
+                entry.get("server", ""),
+                entry["detector"],
+                entry["item"],
+                entry["field"],
+                entry["category"],
+            )
         except KeyError as exc:
             raise BaselineError(f"findings[{index}] is missing {exc.args[0]!r}") from None
         if not all(isinstance(part, str) for part in key):

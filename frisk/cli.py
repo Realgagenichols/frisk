@@ -13,7 +13,6 @@ from frisk.core.baseline import (
     Baseline,
     BaselineError,
     apply_baseline,
-    finding_key,
     load_baseline,
     render_baseline,
 )
@@ -21,9 +20,17 @@ from frisk.core.clientconfig import ConfigError, ConfiguredServer, parse_client_
 from frisk.core.detectors import ALL_DETECTORS
 from frisk.core.engine import run_detectors
 from frisk.core.models import Finding, Inventory, Severity
+from frisk.core.multi import (
+    DISABLED,
+    ERROR,
+    ServerScan,
+    config_line_of,
+    render_multi_human,
+    render_multi_json,
+)
 from frisk.core.report import render_human, render_json
 from frisk.core.sanitize import c0_escape
-from frisk.core.sarif import render_sarif
+from frisk.core.sarif import render_multi_sarif, render_sarif
 from frisk.core.score import Assessment, assess, exit_code, parse_fail_on
 from frisk.lockfile import LockError, diff_lock, read_lock, render_diff, write_lock
 from frisk.sandbox import SandboxOptions, inspect_decoys, prepare_stdio, scan_for_canary
@@ -265,49 +272,63 @@ def _scan_config(args: argparse.Namespace) -> int:
 
     baseline = _load_baseline(args.baseline) if args.baseline else None
     fail_on = parse_fail_on(args.fail_on)
+    scans: list[ServerScan] = []
+    collected: list[tuple[str, Finding]] = []
     worst = 0
-    sections: list[str] = []
 
     for server in servers:
-        header = f"═══ {c0_escape(server.name)} ═══"
+        scan = ServerScan(name=server.name, config_line=config_line_of(text, server.name))
+        scans.append(scan)
         if server.disabled:
-            sections.append(f"{header}\ndisabled in the config — not scanned\n")
+            scan.status = DISABLED
             continue
-        per = _target_args_for(args, server)
         try:
-            inventory, honeypot = _enumerate(per)
+            inventory, honeypot = _enumerate(_target_args_for(args, server))
         except ConnectorError as exc:
-            # Reported, not fatal, and it still gates: "could not be assessed" is never
-            # the same as "clean".
-            sections.append(f"{header}\nERROR: {exc}\n")
+            scan.status = ERROR
+            scan.error = str(exc)
             worst = max(worst, EXIT_OPERATIONAL_ERROR)
             continue
         findings = run_detectors(inventory, ALL_DETECTORS) + honeypot
+        collected.extend((server.name, f) for f in findings)
         if baseline is not None:
-            split = apply_baseline(findings, baseline)
-            gating, accepted, stale = split.gating, split.accepted, split.stale
+            # Scoped to THIS server: accepting a poisoned `search` on one entry must not
+            # accept the identical finding on another, since they are two installations
+            # fixed by uninstalling two different servers.
+            split = apply_baseline(findings, baseline, server=server.name)
+            scan.gating, scan.accepted, scan.stale = split.gating, split.accepted, split.stale
         else:
-            gating, accepted, stale = findings, [], []
-        assessment = assess(gating)
-        worst = max(worst, exit_code(assessment, fail_on))
-        sections.append(
-            header
-            + "\n"
-            + render_human(
-                inventory,
-                gating,
-                assessment,
-                accepted=accepted,
-                stale=stale,
-                fail_on=args.fail_on,
-            )
-        )
+            scan.gating = findings
+        scan.inventory = inventory
+        scan.assessment = assess(scan.gating)
+        worst = max(worst, exit_code(scan.assessment, fail_on))
 
-    sys.stdout.write(
-        f"frisk — {len(servers)} server{'' if len(servers) == 1 else 's'} from "
-        f"{c0_escape(args.config)}\n\n" + "\n".join(sections)
-    )
+    if args.write_baseline:
+        _write_baseline(args, collected)
+        return 0
+
+    if args.format == "sarif":
+        sys.stdout.write(render_multi_sarif(scans, args.config, fail_on=args.fail_on))
+    elif args.format == "json":
+        sys.stdout.write(render_multi_json(scans, args.config, fail_on=args.fail_on))
+    else:
+        sys.stdout.write(render_multi_human(scans, args.config, fail_on=args.fail_on))
     return worst
+
+
+def _write_baseline(args: argparse.Namespace, findings) -> None:
+    try:
+        Path(args.write_baseline).write_text(render_baseline(findings), encoding="utf-8")
+    except OSError as exc:
+        raise UsageError(
+            f"cannot write baseline {args.write_baseline}: {type(exc).__name__}"
+        ) from None
+    count = len(load_baseline(Path(args.write_baseline).read_text(encoding="utf-8")).keys)
+    print(
+        f"wrote baseline: {args.write_baseline} "
+        f"({count} accepted finding{'' if count == 1 else 's'})",
+        file=sys.stderr,
+    )
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
@@ -317,8 +338,6 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 "give either a target or --config, not both — --config already says which "
                 "servers to scan"
             )
-        if args.format != "human":
-            raise UsageError(f"--config currently supports --format human, not {args.format!r}")
         return _scan_config(args)
     if not args.target:
         raise UsageError("no target given: frisk scan <command-or-url>, or --config <path>")
@@ -329,20 +348,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if args.write_baseline:
         # Writing a baseline is an explicit act of acceptance, so it reports what it accepted
         # and exits 0 rather than also gating on the very findings it just recorded.
-        try:
-            Path(args.write_baseline).write_text(
-                render_baseline(all_findings), encoding="utf-8"
-            )
-        except OSError as exc:
-            raise UsageError(
-                f"cannot write baseline {args.write_baseline}: {type(exc).__name__}"
-            ) from None
-        accepted_keys = {finding_key(f) for f in all_findings}
-        print(
-            f"wrote baseline: {args.write_baseline} "
-            f"({len(accepted_keys)} accepted finding{'' if len(accepted_keys) == 1 else 's'})",
-            file=sys.stderr,
-        )
+        _write_baseline(args, all_findings)
         return 0
 
     baseline = _load_baseline(args.baseline) if args.baseline else None
@@ -354,9 +360,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
     assessment: Assessment = assess(gating)
     fail_on = parse_fail_on(args.fail_on)
-    renderer = {"json": render_json, "sarif": render_sarif}.get(
-        args.format, render_human
-    )
+    extra = {"location_path": args.lock} if args.format == "sarif" else {}
+    renderer = {"json": render_json, "sarif": render_sarif}.get(args.format, render_human)
     sys.stdout.write(
         renderer(
             inventory,
@@ -365,6 +370,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             accepted=accepted,
             stale=stale,
             fail_on=args.fail_on,
+            **extra,
         )
     )
     if not args.no_lock:
