@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from frisk import __version__
@@ -49,6 +50,26 @@ class ServerScan:
     @property
     def scanned(self) -> bool:
         return self.status == SCANNED
+
+
+def sarif_config_path(config_path: str, workspace: str) -> tuple[str, bool]:
+    """The path to publish in a SARIF document, and whether it resolves in the checkout.
+
+    Two reasons not to emit what the user typed. GitHub resolves an artifact location against
+    the checkout, so an absolute path outside it annotates nothing — and a SARIF file is
+    UPLOADED, so `/Users/gage/Library/.../claude_desktop_config.json` publishes the operating
+    system username to whoever can read the repository's security tab (S3). The README's own
+    example points at a home-directory config, so this is the common path, not the exotic one.
+
+    Under the workspace: a relative path, which is what GitHub wants anyway. Outside it: the
+    basename alone, which names the file without naming the person.
+    """
+    try:
+        resolved = Path(config_path).resolve()
+        relative = resolved.relative_to(Path(workspace).resolve())
+    except (ValueError, OSError):
+        return Path(config_path).name, False
+    return str(relative), True
 
 
 def config_line_of(config_text: str, server_name: str) -> int:

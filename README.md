@@ -206,6 +206,9 @@ nobody could assess is not a clean one.
 > **SARIF needs a location that exists in your checkout.** `--config` anchors on the config
 > file, so point it at a committed `.mcp.json` rather than
 > `~/Library/Application Support/Claude/...`. Single-target scans anchor on the `--lock` path.
+> A config outside the working directory is published by basename only — an uploaded SARIF
+> file would otherwise carry your home path, and with it your username — and frisk warns that
+> the annotations will not resolve.
 
 ### Options
 

@@ -27,6 +27,7 @@ from frisk.core.multi import (
     config_line_of,
     render_multi_human,
     render_multi_json,
+    sarif_config_path,
 )
 from frisk.core.report import render_human, render_json
 from frisk.core.sanitize import c0_escape
@@ -269,6 +270,16 @@ def _scan_config(args: argparse.Namespace) -> int:
     except OSError as exc:
         raise UsageError(f"cannot read config {args.config}: {type(exc).__name__}") from None
     servers = parse_client_config(text)
+    # What goes INTO the document, which may be uploaded — never the raw path the user typed.
+    published_path, in_workspace = sarif_config_path(args.config, os.getcwd())
+    if args.format == "sarif" and not in_workspace:
+        _warn(
+            args,
+            f"{args.config} is outside the working directory, so GitHub cannot resolve it "
+            f"against your checkout — the annotation will not land on a line. Published as "
+            f"{published_path!r} to keep the absolute path (and your username) out of the "
+            "uploaded file. Point --config at a committed config for CI.",
+        )
 
     baseline = _load_baseline(args.baseline) if args.baseline else None
     fail_on = parse_fail_on(args.fail_on)
@@ -308,7 +319,7 @@ def _scan_config(args: argparse.Namespace) -> int:
         return 0
 
     if args.format == "sarif":
-        sys.stdout.write(render_multi_sarif(scans, args.config, fail_on=args.fail_on))
+        sys.stdout.write(render_multi_sarif(scans, published_path, fail_on=args.fail_on))
     elif args.format == "json":
         sys.stdout.write(render_multi_json(scans, args.config, fail_on=args.fail_on))
     else:

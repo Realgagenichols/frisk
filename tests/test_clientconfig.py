@@ -83,3 +83,33 @@ def test_malformed_configs_fail_loudly_and_specifically(text, expected):
     with pytest.raises(ConfigError) as excinfo:
         parse_client_config(text)
     assert expected in str(excinfo.value)
+
+
+# ── what goes into an UPLOADED document (S3) ────────────────────────────────
+
+
+def test_a_config_inside_the_workspace_is_published_relative(tmp_path):
+    from frisk.core.multi import sarif_config_path
+
+    config = tmp_path / "sub" / ".mcp.json"
+    config.parent.mkdir()
+    config.write_text("{}", encoding="utf-8")
+    path, inside = sarif_config_path(str(config), str(tmp_path))
+    assert path == "sub/.mcp.json" and inside is True
+
+
+def test_a_config_outside_the_workspace_is_published_as_a_basename(tmp_path):
+    """A SARIF file gets UPLOADED. `/Users/<name>/Library/.../claude_desktop_config.json`
+    publishes the operating-system username to anyone who can read the repository's security
+    tab — and the README's own example points at a home-directory config, so this is the
+    common path, not an exotic one."""
+    from frisk.core.multi import sarif_config_path
+
+    outside = tmp_path / "elsewhere" / "claude_desktop_config.json"
+    outside.parent.mkdir()
+    outside.write_text("{}", encoding="utf-8")
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    path, inside = sarif_config_path(str(outside), str(workspace))
+    assert path == "claude_desktop_config.json" and inside is False
+    assert "/" not in path and str(tmp_path) not in path

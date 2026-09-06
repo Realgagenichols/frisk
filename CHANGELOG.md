@@ -30,6 +30,23 @@ Notable changes to `mcp-frisk`. Dates are release dates; the format follows
 
 - GitHub Actions are pinned to commit SHAs, with Dependabot to keep them moving.
 
+### Fixed
+
+- **SARIF results now carry a location.** GitHub rejects an upload containing a result with
+  no `locations` (`locationFromSarifResult: expected at least one location`), so the previous
+  location-free output — correct per the SARIF spec — was refused by the one consumer it was
+  built for. Results are anchored at the config line declaring the server (`--config`) or at
+  the lockfile path (single target), and frisk supplies `primaryLocationLineHash` itself,
+  hashed from logical identity so an unrelated edit does not churn every alert.
+
+### Security
+
+- **Baseline acceptance is scoped to one server.** Under `--config`, accepting a finding on
+  one entry previously accepted the identical finding on every other entry — two
+  installations of the same poisoned tool are two separate trust decisions.
+- **An uploaded SARIF file no longer carries an absolute config path**, which on macOS
+  contains the account name. A config outside the working directory is published by basename.
+
 ## [0.1.0] — 2026-09-06
 
 First public release.

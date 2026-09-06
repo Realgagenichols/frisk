@@ -533,10 +533,30 @@ def test_config_sarif_is_one_run_anchored_in_the_config_file(tmp_path):
     run = doc["runs"][0]
     # Every result must carry a location or GitHub rejects the whole upload.
     assert run["results"] and all("locations" in r for r in run["results"])
+    # The basename, not the absolute path: a SARIF document gets uploaded, and the absolute
+    # path would carry the OS username with it (see the S3 test below).
     assert all(
-        r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == str(config)
+        r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == config.name
         for r in run["results"]
     )
     assert any(r["ruleId"] == "frisk/scan-error" for r in run["results"])
     servers = {r["properties"]["server"] for r in run["results"]}
     assert servers == {"good", "bad", "dead"}
+
+
+def test_sarif_never_publishes_an_absolute_config_path(tmp_path):
+    """S3 applied to an uploaded artifact: the document must not carry the absolute path,
+    which on macOS contains the user's account name."""
+    config = tmp_path / "claude_desktop_config.json"
+    config.write_text(json.dumps({"mcpServers": {"a": _fixture_server("poisoned")}}), "utf-8")
+    result = run_frisk("scan", "--no-lock", "--format", "sarif", "--config", str(config))
+    assert result.returncode == 2
+    assert str(tmp_path) not in result.stdout, "the absolute path reached the SARIF document"
+    doc = json.loads(result.stdout)
+    uris = {
+        r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+        for r in doc["runs"][0]["results"]
+    }
+    assert uris == {"claude_desktop_config.json"}
+    # And it says so, rather than silently producing annotations that land nowhere.
+    assert "outside the working directory" in result.stderr
