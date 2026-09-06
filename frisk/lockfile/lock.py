@@ -11,6 +11,7 @@ a name with a raw newline can never forge an extra lock line.
 from __future__ import annotations
 
 import hashlib
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,8 +49,14 @@ def write_lock(path: str | Path, inventory: Inventory) -> None:
     Path(path).write_text(build_lock_text(inventory), encoding="utf-8")
 
 
-def read_lock(path: str | Path) -> dict[str, str]:
-    """Parse a lockfile into ``{escaped_ref: hash}``. Splits on explicit ``"\n"`` (R15)."""
+def read_lock(path: str | Path) -> list[tuple[str, str]]:
+    """Parse a lockfile into an ordered ``[(hash, escaped_ref), …]``.
+
+    A LIST, not a dict: MCP does not forbid two definitions sharing a name, and keying by ref
+    silently discarded every duplicate line — so a poisoned twin of an existing tool name was
+    invisible to `frisk verify`, the one thing verify exists to catch. Splits on explicit
+    ``"\n"`` (R15, Pattern 13).
+    """
     try:
         text = Path(path).read_text(encoding="utf-8")
     except OSError as exc:
@@ -57,13 +64,13 @@ def read_lock(path: str | Path) -> dict[str, str]:
     lines = text.split("\n")  # explicit framing — never splitlines() (Pattern 13)
     if not lines or lines[0] != _HEADER:
         raise LockError(f"not a frisk lockfile (bad header) in {path}")
-    entries: dict[str, str] = {}
+    entries: list[tuple[str, str]] = []
     for line in lines[1:]:
         if not line:
             continue
         if len(line) < _HASH_LEN + len(_SEP):
             raise LockError(f"malformed lock line in {path}")
-        entries[line[_HASH_LEN + len(_SEP) :]] = line[:_HASH_LEN]
+        entries.append((line[:_HASH_LEN], line[_HASH_LEN + len(_SEP) :]))
     return entries
 
 
@@ -78,13 +85,34 @@ class LockDiff:
         return bool(self.added or self.removed or self.mutated)
 
 
-def diff_lock(locked: dict[str, str], inventory: Inventory) -> LockDiff:
-    """Diff a live inventory against a lockfile baseline (R14)."""
-    live = {_lock_key(item.ref): hash_item(item) for item in inventory.items}
-    added = sorted(set(live) - set(locked))
-    removed = sorted(set(locked) - set(live))
-    mutated = sorted(ref for ref in set(locked) & set(live) if locked[ref] != live[ref])
-    return LockDiff(added=added, removed=removed, mutated=mutated)
+def diff_lock(locked: list[tuple[str, str]], inventory: Inventory) -> LockDiff:
+    """Diff a live inventory against a lockfile baseline (R14).
+
+    Multiset semantics, per ref: a name may legitimately carry more than one definition, and
+    comparing sets would let a poisoned twin hide behind its benign namesake. For each ref we
+    compare how MANY definitions it has and WHICH hashes they carry.
+    """
+    live = [(hash_item(item), _lock_key(item.ref)) for item in inventory.items]
+    locked_counts = Counter(ref for _, ref in locked)
+    live_counts = Counter(ref for _, ref in live)
+
+    added = {ref for ref in live_counts if live_counts[ref] > locked_counts[ref]}
+    removed = {ref for ref in locked_counts if locked_counts[ref] > live_counts[ref]}
+
+    locked_hashes: dict[str, Counter[str]] = defaultdict(Counter)
+    for digest, ref in locked:
+        locked_hashes[ref][digest] += 1
+    live_hashes: dict[str, Counter[str]] = defaultdict(Counter)
+    for digest, ref in live:
+        live_hashes[ref][digest] += 1
+    # A ref whose count changed is already reported as added/removed; `mutated` is for a ref
+    # whose definitions were swapped in place.
+    mutated = {
+        ref
+        for ref in set(locked_counts) & set(live_counts)
+        if ref not in added and ref not in removed and locked_hashes[ref] != live_hashes[ref]
+    }
+    return LockDiff(added=sorted(added), removed=sorted(removed), mutated=sorted(mutated))
 
 
 def render_diff(diff: LockDiff) -> str:

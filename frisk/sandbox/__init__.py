@@ -22,19 +22,25 @@ from frisk.sandbox.honeypot import (
     seed_decoys,
 )
 from frisk.sandbox.prepare import (
+    RlimitSupport,
     SandboxOptions,
     SandboxResult,
+    build_profile,
     prepare_stdio,
+    probe_rlimits,
     scrub_env,
     seatbelt_available,
 )
 
 __all__ = [
     "DecoySet",
+    "RlimitSupport",
     "SandboxOptions",
     "SandboxResult",
+    "build_profile",
     "inspect_decoys",
     "prepare_stdio",
+    "probe_rlimits",
     "scan_for_canary",
     "scrub_env",
     "seatbelt_available",

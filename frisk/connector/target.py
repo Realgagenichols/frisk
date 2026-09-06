@@ -34,11 +34,23 @@ class RemoteTarget:
 
     @property
     def label(self) -> str:
-        # The URL may itself carry a token in a query string — show only scheme://host.
+        """scheme://host[:port] only — never a path, query, or userinfo.
+
+        A URL can carry credentials in three places: the query string (`?api_key=…`), the
+        path, and the userinfo component (`https://user:secret@host/`). `netloc` INCLUDES
+        userinfo, so labelling with it leaked the password into every error line; `hostname`
+        does not (S3, cross-cutting Pattern 11).
+        """
         from urllib.parse import urlsplit
 
         parts = urlsplit(self.url)
-        return f"remote:{parts.scheme}://{parts.netloc}"
+        host = parts.hostname or ""
+        try:
+            port = parts.port
+        except ValueError:  # malformed port — drop it rather than echo the raw netloc
+            port = None
+        suffix = f":{port}" if port else ""
+        return f"remote:{parts.scheme}://{host}{suffix}"
 
 
 Target = StdioTarget | RemoteTarget

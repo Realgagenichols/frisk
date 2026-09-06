@@ -6,6 +6,7 @@ under Pyodide (R23).
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Protocol, runtime_checkable
 
 from frisk.core.models import Evidence, Finding, Inventory, Severity
@@ -72,17 +73,16 @@ def suppress_overlaps(findings: list[Finding]) -> list[Finding]:
         start, end = f.evidence.span  # type: ignore[misc]
         return (-f.severity, -(end - start), f.detector, start, f.evidence.category, f.message)
 
+    # Bucketed by the key the clash test requires anyway. Scanning the whole kept list made
+    # this quadratic in the total finding count, which an untrusted server chooses.
+    kept_by_field: dict[tuple[str, str], list[Finding]] = defaultdict(list)
     kept: list[Finding] = []
     for finding in sorted(spanned, key=precedence):
         span = finding.evidence.span
         assert span is not None
-        clashes = any(
-            k.item_ref == finding.item_ref
-            and k.field == finding.field
-            and _overlaps(k.evidence.span, span)  # type: ignore[arg-type]
-            for k in kept
-        )
-        if not clashes:
+        bucket = kept_by_field[(finding.item_ref, finding.field)]
+        if not any(_overlaps(k.evidence.span, span) for k in bucket):  # type: ignore[arg-type]
+            bucket.append(finding)
             kept.append(finding)
 
     result = unspanned + kept

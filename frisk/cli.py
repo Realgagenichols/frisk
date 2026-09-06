@@ -82,8 +82,8 @@ def _enumerate(args: argparse.Namespace) -> tuple[Inventory, list[Finding]]:
     if isinstance(target, StdioTarget):
         options = SandboxOptions(enabled=not args.no_sandbox, timeout_seconds=args.timeout)
         sandboxed = prepare_stdio(target, options)
-        if sandboxed.warning:
-            print(f"warning: {sandboxed.warning}", file=sys.stderr)
+        for warning in sandboxed.warnings:
+            print(f"warning: {warning}", file=sys.stderr)
         if sandboxed.decoys is not None and not sandboxed.decoys.atime_reliable:
             # Degraded, not disabled: tamper + canary-exfiltration detection still work.
             print(

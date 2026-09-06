@@ -103,7 +103,7 @@ It's not just fixtures: pointed at the official `@modelcontextprotocol/server-fi
 | D2 | hidden content | zero-width chars, Unicode tag chars, bidi overrides, ANSI escapes, HTML comments, homoglyphs — flagged with exact byte offsets |
 | D3 | sensitive parameters | schemas that solicit conversation history, env vars, file contents, credentials, or unbounded catch-alls |
 | D4 | scope mismatch | capability creep — a "weather" tool that also takes a `command` |
-| D5 | shadowing | impersonation of common tool names; "always use this tool instead" steering language |
+| D5 | shadowing | impersonation of common tool names; two definitions sharing one name; "always use this tool instead" steering language |
 | D6 | rug-pull | the `frisk.lock` baseline + `frisk verify` diff |
 | D7 | metadata hygiene | remote/unpinned code sourcing, missing or unpinned server identity |
 | D8 | behavioral honeypot | a server that reads, tampers with, or exfiltrates the sandbox's decoy credentials during enumeration |
@@ -177,8 +177,13 @@ A well-behaved server touches none of these. The decoy values are fake, and the 
 
 ## The sandbox
 
-On macOS, local stdio servers run under a seatbelt profile that **denies all network** and **denies the real HOME's credential stores** (`~/.ssh`, `~/.aws`, keychains, …), inside the throwaway fake `$HOME`, with a scrubbed environment (frisk's own secrets never reach the untrusted server), CPU/memory rlimits, and a hard wall-clock timeout.
+On macOS, local stdio servers run under a seatbelt profile that **denies all network** and **denies the real HOME's credential stores**, inside the throwaway fake `$HOME`, with a scrubbed environment (frisk's own secrets never reach the untrusted server), a CPU rlimit, and a hard wall-clock timeout.
 
+The denied set is a list, not a boundary — worth knowing exactly where the line is:
+
+- **Denied:** `~/.ssh`, `~/.aws`, `~/.config` (gcloud, gh, and everything else XDG), `~/.claude*`, `~/.cursor`, `~/.codex`, keychains, browser and messaging stores, `~/.netrc`/`~/.npmrc`/`~/.pypirc`/`~/.git-credentials` and the other registry credential files, plus `.env` files and shell history **anywhere** on disk.
+- **Not denied:** everything else. Reads are allow-by-default so that an arbitrary interpreter still starts; `~/Documents` and your source tree are readable. Writes are confined to the sandbox scratch and temp dirs, and the network is closed, so a server that reads something it shouldn't still has to smuggle it out through the MCP channel — which is what the honeypot canary watches.
+- **No memory limit on macOS.** `RLIMIT_AS` is not implemented there, so frisk probes rather than assumes and prints a warning instead of claiming a cap it can't apply. The CPU limit and wall-clock timeout still bound a runaway server.
 - `--no-sandbox` opts out of the seatbelt layer.
 - Where `sandbox-exec` is unavailable, frisk falls back to the lightweight layers (fake HOME + scrubbed env + rlimits + timeout) **with a printed warning** — never a silent downgrade.
 
@@ -205,6 +210,7 @@ Run it locally: `python scripts/build_site.py && python -m http.server -d site`.
 - **Secret values never appear in output.** Evidence names categories, field paths, and byte offsets; decoy contents, auth tokens, and sensitive schema values are never echoed (errors report exception *types*, not messages that might carry target bytes).
 - **The terminal is a rendering target, too.** All server-derived text is control-character-escaped before printing, so a malicious definition can't use ANSI escapes to forge or hide report lines.
 - **One detector core, everywhere.** The CLI and the playground import the same pure Python package — no reimplementation drift between what CI checks and what the browser shows.
+- **Scan every field, not a list of field names.** Detectors read every string a server advertises — `title`, `annotations`, `outputSchema`, `uri`, `_meta`, and whatever MCP adds next — because an allowlist of field names is a relocation bypass waiting for the schema to grow. Only JSON-Schema structural keys are skipped.
 
 ## Limitations
 

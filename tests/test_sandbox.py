@@ -99,7 +99,7 @@ def test_disabled_mode_does_not_use_seatbelt(tmp_path):
     result = prepare_stdio(target, SandboxOptions(enabled=False, fake_home=tmp_path / "home"))
     assert result.mode == "disabled"
     assert result.target.command != "sandbox-exec"
-    assert result.warning is None
+    assert not any("seatbelt" in w.lower() for w in result.warnings)
 
 
 def test_fallback_when_seatbelt_unavailable_warns(tmp_path, monkeypatch):
@@ -107,7 +107,8 @@ def test_fallback_when_seatbelt_unavailable_warns(tmp_path, monkeypatch):
     target = _probe_target(tmp_path / "r.json", tmp_path / "home")
     result = prepare_stdio(target, SandboxOptions(enabled=True, fake_home=tmp_path / "home"))
     assert result.mode == "fallback"
-    assert result.warning and "seatbelt" in result.warning.lower()  # never a silent downgrade
+    # Never a silent downgrade — and the seatbelt warning leads, ahead of any rlimit note.
+    assert "seatbelt" in result.warnings[0].lower()
 
 
 def test_prepare_forces_fake_home_in_env(tmp_path):

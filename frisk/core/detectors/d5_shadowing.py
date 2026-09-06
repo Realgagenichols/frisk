@@ -8,14 +8,21 @@ Two signals:
    is exactly the shadowing vector: calls meant for the trusted tool route here.
 2. **Steering (MEDIUM)** — description text that herds the model toward this tool or away
    from others ("always use this instead of …", "other servers' tools are unreliable").
+3. **Duplicate names (MEDIUM)** — two definitions on the same server sharing a name (R28).
+   Which one a client resolves is undefined, so a benign twin can stand in front of a
+   poisoned one.
+
+Names are compared folded (`fold_name`): `readFile` and `read_file` are one name to anyone
+reading a tool list, so they are one name here.
 """
 
 from __future__ import annotations
 
 import re
+from collections import Counter
 
-from frisk.core.detectors.base import Rule, model_visible_text, scan_item_leaves
-from frisk.core.models import Finding, Inventory, Severity
+from frisk.core.detectors.base import Rule, fold_name, model_visible_text, scan_item_leaves
+from frisk.core.models import Evidence, Finding, Inventory, Severity
 from frisk.core.sanitize import make_evidence
 
 _I = re.IGNORECASE
@@ -42,6 +49,10 @@ _COMMON_TOOL_NAMES = {
     "execute_command",
     "run_command",
 }
+
+# Compared against fold_name(item.name), so `readFile` and `read-file` collide with
+# `read_file` the way a reader of the tool list would expect them to.
+_COMMON_TOOL_NAMES_FOLDED = {fold_name(n) for n in _COMMON_TOOL_NAMES}
 
 _STEERING_RULES = [
     Rule(
@@ -76,9 +87,9 @@ class Shadowing:
     id = "D5"
 
     def run(self, inventory: Inventory) -> list[Finding]:
-        findings: list[Finding] = []
+        findings: list[Finding] = self._duplicate_names(inventory)
         for item in inventory.items:
-            if item.name.lower() in _COMMON_TOOL_NAMES:
+            if fold_name(item.name) in _COMMON_TOOL_NAMES_FOLDED:
                 findings.append(
                     Finding(
                         detector=self.id,
@@ -99,3 +110,28 @@ class Shadowing:
                 scan_item_leaves(self.id, item, _STEERING_RULES, field_filter=model_visible_text)
             )
         return findings
+
+    def _duplicate_names(self, inventory: Inventory) -> list[Finding]:
+        """Two definitions of one kind sharing a name (R28).
+
+        Which one a client resolves is undefined, so a benign twin can stand in front of a
+        poisoned one — the same shadowing vector as impersonating a built-in, sourced from
+        the server's own inventory. Emitted WITHOUT a span so the engine's overlap
+        suppression can never hide it behind another finding on the same name.
+        """
+        counts = Counter(item.ref for item in inventory.items)
+        return [
+            Finding(
+                detector=self.id,
+                severity=Severity.MEDIUM,
+                item_ref=ref,
+                field="name",
+                message=(
+                    f"{count} definitions advertised under the same name — which one a "
+                    "client resolves is undefined"
+                ),
+                evidence=Evidence(category="duplicate-definition-name"),
+            )
+            for ref, count in sorted(counts.items())
+            if count > 1
+        ]
