@@ -54,8 +54,17 @@ class Item:
 
     @property
     def ref(self) -> str:
-        """Stable human/lock reference, e.g. ``tool:get_weather``."""
-        return f"{self.kind}:{self.name}"
+        """Stable human/lock reference, e.g. ``tool:get_weather``.
+
+        A resource with no `name` takes its name from its `uri`, and a URI can embed a
+        password or an api-key query parameter — which the ref then carries into every
+        report line AND into `frisk.lock` on disk. Credentials are masked here, at the one
+        place every sink reads from (S3, Pattern 29). The hash is computed from `raw_bytes`,
+        not from the ref, so masking cannot weaken rug-pull detection.
+        """
+        from frisk.core.sanitize import redact_url_secrets
+
+        return f"{self.kind}:{redact_url_secrets(self.name)}"
 
 
 @dataclass
@@ -117,7 +126,19 @@ def iter_string_leaves(item: Item) -> Iterator[tuple[str, str]]:
     for key in sorted(item.payload):
         if key in _PAYLOAD_KEYS_SCANNED_ELSEWHERE:
             continue
-        yield from _walk(key, item.payload[key])
+        # `arguments` is a prompt's scan surface only because ingest projects it into the
+        # synthetic `inputSchema` below. On a TOOL or RESOURCE no such projection exists, so
+        # skipping the key there would leave it entirely unscanned — and the SDK models are
+        # `extra="allow"`, so a server can put one on any item kind.
+        if key == "arguments" and item.kind is ItemKind.PROMPT:
+            continue
+        value = item.payload[key]
+        # A resource with no `name` takes its name from `uri` (ingest.resource_item), which
+        # would then be scanned once as `name` and again as `uri` — two identical findings
+        # and a doubled risk score. Any payload string already yielded verbatim is skipped.
+        if isinstance(value, str) and value in (item.name, item.description):
+            continue
+        yield from _walk(key, value)
     if item.input_schema is not None and "inputSchema" not in item.payload:
         # A prompt's schema is ingest's projection of `arguments`, not a payload key of its
         # own; so is the schema of an Item constructed directly rather than through ingest.
@@ -125,10 +146,8 @@ def iter_string_leaves(item: Item) -> Iterator[tuple[str, str]]:
 
 
 # `name`/`description` are emitted above under their bare paths — walking them again would
-# double-report every finding in them. Prompt `arguments` are projected into the synthetic
-# `inputSchema` by ingest.prompt_item, which carries every argument key and is therefore
-# their complete scan surface; walking the raw list too would report each argument twice.
-_PAYLOAD_KEYS_SCANNED_ELSEWHERE = frozenset({"name", "description", "arguments"})
+# double-report every finding in them.
+_PAYLOAD_KEYS_SCANNED_ELSEWHERE = frozenset({"name", "description"})
 
 
 def _walk(path: str, node: Any) -> Iterator[tuple[str, str]]:

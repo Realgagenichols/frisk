@@ -79,9 +79,12 @@ def probe_rlimits() -> RlimitSupport:
     does not implement `RLIMIT_AS` at all (`setrlimit` returns EINVAL there too), so the only
     way to know is to set a limit and read it back.
     """
+    # Each probe reports on its own labelled line: a shell where `ulimit -v` errors and
+    # prints nothing would otherwise shift the fields and take the working CPU limit down
+    # with it.
     script = (
         "ulimit -t 3600 2>/dev/null; ulimit -v 1048576 2>/dev/null; "
-        'echo "$(ulimit -t) $(ulimit -v)"'
+        'echo "cpu=$(ulimit -t 2>/dev/null)"; echo "mem=$(ulimit -v 2>/dev/null)"'
     )
     try:
         completed = subprocess.run(
@@ -89,10 +92,15 @@ def probe_rlimits() -> RlimitSupport:
         )
     except (OSError, subprocess.SubprocessError):
         return RlimitSupport(cpu=False, memory=False)
-    fields = completed.stdout.split()
-    if len(fields) != 2:
-        return RlimitSupport(cpu=False, memory=False)
-    return RlimitSupport(cpu=fields[0] != "unlimited", memory=fields[1] != "unlimited")
+    reported = dict(
+        line.split("=", 1) for line in completed.stdout.splitlines() if "=" in line
+    )
+
+    def enforced(key: str) -> bool:
+        value = reported.get(key, "").strip()
+        return bool(value) and value != "unlimited"
+
+    return RlimitSupport(cpu=enforced("cpu"), memory=enforced("mem"))
 
 
 def scrub_env(
@@ -161,6 +169,17 @@ _SENSITIVE_HOME_SUBPATHS = (
     # Password managers
     ".op",
     ".password-store",
+    # Shell startup files: where an exported API key actually lives, far more often than in
+    # a credential store. Denying only history missed all of these.
+    ".zshrc",
+    ".zshenv",
+    ".zprofile",
+    ".zlogin",
+    ".bashrc",
+    ".bash_profile",
+    ".profile",
+    ".bash_login",
+    ".config/fish",
     # macOS credential, messaging, and browser stores
     "Library/Keychains",
     "Library/Cookies",
@@ -174,6 +193,8 @@ _SENSITIVE_HOME_SUBPATHS = (
     "Library/Messages",
     "Library/Mail",
     "Library/Safari",
+    "Library/Containers",
+    "Library/Application Support/Code/User/globalStorage",
 )
 # NOT denied: ~/Documents, ~/Desktop, ~/Downloads. Denying them is tempting — frisk only ever
 # runs initialize + list, so no honest server needs them — but servers themselves routinely
@@ -183,10 +204,17 @@ _SENSITIVE_HOME_SUBPATHS = (
 # otherwise.
 
 # Path-shape denials that no subpath list can express: dotenv files (which live in whatever
-# directory the scan runs from, not under HOME) and shell/REPL history files.
+# directory the scan runs from, not under HOME), direnv, and shell/REPL history files.
+#
+# Both patterns must match a FILE, never a path prefix. `/\.env($|\.)` denied the directory
+# `.env` too, which broke any target in a `python -m venv .env` tree — the same shape of
+# self-inflicted breakage as denying `~/.local/share`. The history pattern allows an
+# undotted basename so fish's `~/.local/share/fish/fish_history` is covered.
 _SENSITIVE_PATH_REGEXES = (
-    r"/\.env($|\.)",
-    r"/\.[a-z_]*_history$",
+    r"/\.env($|\.[^/]*$)",
+    r"/\.envrc$",
+    r"/\.?[a-z0-9_]*_history$",
+    r"/\.zsh_sessions/",
 )
 
 

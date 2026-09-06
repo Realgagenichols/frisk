@@ -76,7 +76,12 @@ def prompt_item(payload: dict[str, Any]) -> Item:
     for index, arg in enumerate(arguments):
         if not isinstance(arg, dict) or not isinstance(arg.get("name"), str):
             raise IngestError(f"prompt {name!r}: argument [{index}] needs a 'name' string")
-        properties[arg["name"]] = {
+        # Two arguments may share a name. Keying the projection on the name alone let the
+        # second silently overwrite the first, so a poisoned argument disappeared entirely
+        # when a benign namesake followed it — the projection has to be lossless, because
+        # `iter_string_leaves` skips the raw list on the strength of that claim.
+        key = arg["name"] if arg["name"] not in properties else f"{arg['name']}[{index}]"
+        properties[key] = {
             "type": "string",
             **{k: v for k, v in arg.items() if k != "name"},
         }

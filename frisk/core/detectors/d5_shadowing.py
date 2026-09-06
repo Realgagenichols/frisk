@@ -78,6 +78,18 @@ _COMMON_TOOL_TOKEN_RUNS = [
 ]
 
 
+def _steering_field(field_path: str) -> bool:
+    """Model-visible prose, minus `_meta`.
+
+    `_meta` is host metadata, and hosts put UI copy there: the Apps SDK's
+    `openai/widgetDescription` says things like "Do not use other tools to render it", which
+    is an instruction to the HOST about rendering, not the model-steering this rule is about.
+    Narrowed for D5 only — D1 and D2 still read `_meta`, because an injected instruction or a
+    zero-width payload is dangerous there whoever the copy was written for.
+    """
+    return model_visible_text(field_path) and not field_path.startswith("_meta")
+
+
 def _impersonates(name: str) -> bool:
     if fold_name(name) in _COMMON_TOOL_NAMES_FOLDED:
         return True
@@ -136,7 +148,7 @@ class Shadowing:
                 )
             # Steering can hide in any model-visible prose (param descriptions included).
             findings.extend(
-                scan_item_leaves(self.id, item, _STEERING_RULES, field_filter=model_visible_text)
+                scan_item_leaves(self.id, item, _STEERING_RULES, field_filter=_steering_field)
             )
         return findings
 

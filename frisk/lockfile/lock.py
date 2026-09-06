@@ -105,12 +105,13 @@ def diff_lock(locked: list[tuple[str, str]], inventory: Inventory) -> LockDiff:
     live_hashes: dict[str, Counter[str]] = defaultdict(Counter)
     for digest, ref in live:
         live_hashes[ref][digest] += 1
-    # A ref whose count changed is already reported as added/removed; `mutated` is for a ref
-    # whose definitions were swapped in place.
+    # A ref can be BOTH: two `search` definitions becoming one poisoned `search` is a removal
+    # and a mutation, and reporting only the removal reads as "the tool went away" when it is
+    # still there with entirely different content. Every true statement gets made.
     mutated = {
         ref
         for ref in set(locked_counts) & set(live_counts)
-        if ref not in added and ref not in removed and locked_hashes[ref] != live_hashes[ref]
+        if locked_hashes[ref] != live_hashes[ref]
     }
     return LockDiff(added=sorted(added), removed=sorted(removed), mutated=sorted(mutated))
 

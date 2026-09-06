@@ -6,9 +6,30 @@ report, so embedded ANSI/newlines cannot forge or hide output lines (cross-cutti
 
 from __future__ import annotations
 
+import re
+
 from frisk.core.models import Evidence
 
 _MAX_SNIPPET = 120
+
+# A URI can carry a credential in two places, and both reach durable output: a resource whose
+# name IS its URI becomes the item ref, which is printed in every report line AND written to
+# frisk.lock, and a URI matched by a prose rule lands in an evidence snippet. Same rule as
+# RemoteTarget.label, one module over (S3).
+_URL_USERINFO = re.compile(r"(?<=://)[^/\s@]+:[^/\s@]*@")
+_URL_SECRET_PARAM = re.compile(
+    r"(?i)([?&](?:api[-_]?key|apikey|access[-_]?token|auth[-_]?token|token|password|passwd"
+    r"|secret|signature|sig|credential)=)[^&\s\"']+"
+)
+
+
+def redact_url_secrets(text: str) -> str:
+    """Mask credentials embedded in URLs, keeping the shape so the reader still recognises it.
+
+    ``postgres://svc:hunter2@db/app`` → ``postgres://REDACTED@db/app``;
+    ``https://h/f?api_key=sk-live-xyz`` → ``https://h/f?api_key=REDACTED``.
+    """
+    return _URL_SECRET_PARAM.sub(r"\1REDACTED", _URL_USERINFO.sub("REDACTED@", text))
 
 
 def c0_escape(text: str) -> str:
@@ -55,5 +76,5 @@ def make_evidence(
     snippet: str | None = None
     if not redact:
         matched = text[char_span[0] : char_span[1]]
-        snippet = c0_escape(matched)[:_MAX_SNIPPET]
+        snippet = redact_url_secrets(c0_escape(matched))[:_MAX_SNIPPET]
     return Evidence(category=category, offset=byte_span[0], span=byte_span, snippet=snippet)

@@ -250,3 +250,19 @@ def test_double_dash_lets_a_colliding_flag_reach_the_server(tmp_path):
         "ignored-by-the-fixture",
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_relocated_payload_is_caught_through_the_real_connector(tmp_path):
+    """Field coverage end to end, not in-process.
+
+    `tool_item()` tests prove the leaf walk; they do not prove that `annotations` survives
+    the connector's `model_dump` into `Item.payload`. This drives the real binary against a
+    server that puts its payload in `annotations.title` and nowhere else.
+    """
+    result = run_frisk(*scan_args("relocated", "--format", "json", "--no-lock"))
+    assert result.returncode == 2, result.stdout + result.stderr
+    doc = json.loads(result.stdout)
+    assert doc["verdict"] == "fail"
+    assert any(
+        f["detector"] == "D1" and f["field"].startswith("annotations") for f in doc["findings"]
+    ), [f["field"] for f in doc["findings"]]

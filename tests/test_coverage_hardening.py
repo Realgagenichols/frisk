@@ -10,6 +10,7 @@ import base64
 import json
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -218,12 +219,35 @@ def test_h3_duplicate_finding_survives_overlap_suppression():
 
 def test_h4_rlimit_probe_matches_what_the_shell_really_does():
     support = probe_rlimits()
-    observed = subprocess.run(
-        ["/bin/sh", "-c", 'ulimit -v 1048576 2>/dev/null; ulimit -v'],
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert support.memory == (observed != "unlimited")
+    for flag, reported in (("-t", support.cpu), ("-v", support.memory)):
+        observed = subprocess.run(
+            ["/bin/sh", "-c", f"ulimit {flag} 1048576 2>/dev/null; ulimit {flag}"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert reported == (observed not in ("", "unlimited")), flag
+    # Both limits are probed independently, so a shell that enforces one and not the other
+    # must not lose the working one (macOS: CPU yes, RLIMIT_AS not implemented at all).
+    assert support.cpu is True
+
+
+def test_h4_probe_keeps_the_cpu_limit_when_only_memory_is_unsupported(monkeypatch):
+    import subprocess as sp
+
+    from frisk.sandbox import prepare
+
+    def fake_run(*a, **kw):
+        # A shell whose `ulimit -v` errors and prints NOTHING: parsed positionally, the
+        # fields shift and the working CPU limit is discarded with it.
+        return sp.CompletedProcess(a[0], 0, stdout="cpu=3600\nmem=\n", stderr="")
+
+    monkeypatch.setattr(prepare.subprocess, "run", fake_run)
+    prepare.probe_rlimits.cache_clear()
+    try:
+        support = prepare.probe_rlimits()
+    finally:
+        prepare.probe_rlimits.cache_clear()
+    assert support.cpu is True and support.memory is False
 
 
 def test_h4_unenforceable_memory_limit_warns_and_is_not_requested(tmp_path, monkeypatch):
@@ -259,10 +283,65 @@ def test_h4_enforceable_memory_limit_is_requested_without_a_warning(tmp_path, mo
 
 
 @pytest.mark.parametrize(
-    "subpath", [".claude.json", ".config", ".git-credentials", "Library/Messages", ".op"]
+    "subpath", [".claude.json", ".config", ".git-credentials", "Library/Messages", ".op", ".zshrc"]
 )
 def test_h4_denylist_covers_the_stores_the_review_found_readable(subpath):
     assert subpath in _SENSITIVE_HOME_SUBPATHS
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="seatbelt is macOS-only")
+@pytest.mark.parametrize("relpath", [".claude.json", ".zsh_history", ".ssh/id_rsa", ".zshrc"])
+def test_h4_denied_paths_are_actually_unreadable_under_the_profile(tmp_path, relpath):
+    """Enforcement, not membership. Asserting a string is in a tuple stays green even if
+    build_profile stopped consuming the tuple — the project's own lessons file forbids
+    exactly that shortcut. A fake "real home" is used so no real secret is touched."""
+    real_home = tmp_path / "real-home"
+    secret = real_home / relpath
+    secret.parent.mkdir(parents=True, exist_ok=True)
+    secret.write_text("SENTINEL-VALUE\n", encoding="utf-8")
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    completed = subprocess.run(
+        ["sandbox-exec", "-p", build_profile(fake_home, real_home), "/bin/sh", "-c",
+         f'cat "{secret}" 2>/dev/null || echo DENIED'],
+        capture_output=True, text=True,
+    )
+    assert completed.stdout.strip() == "DENIED", relpath
+    assert "SENTINEL" not in completed.stdout
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="seatbelt is macOS-only")
+def test_h4_denial_probe_has_discriminating_power(tmp_path):
+    """P21: the probe above must be able to report READABLE, or it proves nothing."""
+    real_home = tmp_path / "real-home"
+    ordinary = real_home / "notes.txt"
+    ordinary.parent.mkdir(parents=True, exist_ok=True)
+    ordinary.write_text("SENTINEL-VALUE\n", encoding="utf-8")
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    completed = subprocess.run(
+        ["sandbox-exec", "-p", build_profile(fake_home, real_home), "/bin/sh", "-c",
+         f'cat "{ordinary}" 2>/dev/null || echo DENIED'],
+        capture_output=True, text=True,
+    )
+    assert "SENTINEL-VALUE" in completed.stdout
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="seatbelt is macOS-only")
+def test_h4_a_dotenv_named_virtualenv_still_runs(tmp_path):
+    r"""`python -m venv .env` is a live convention, and a `/\.env` prefix denial broke it —
+    the same self-inflicted breakage as denying ~/.local/share."""
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    interpreter = tmp_path / "proj" / ".env" / "bin" / "python"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+    interpreter.chmod(0o755)
+    completed = subprocess.run(
+        ["sandbox-exec", "-p", build_profile(fake_home, tmp_path / "real-home"), str(interpreter)],
+        capture_output=True, text=True,
+    )
+    assert completed.stdout.strip() == "ok", completed.stderr
 
 
 def test_h4_managed_interpreter_root_is_not_denied():
@@ -345,7 +424,7 @@ def test_h5_fold_name_is_not_over_eager():
 
 @pytest.mark.parametrize("prefix_len", range(3))
 def test_h5_base64_exfiltrated_decoy_is_caught_at_every_byte_phase(prefix_len):
-    canary = "d4" * 20
+    canary = "0f1e2d3c4b5a69788796a5b4c3d2e1f009182736"
     body = _DECOY_TEMPLATES[".aws/credentials"].format(
         canary=canary, canary_upper16=canary[:16].upper()
     )
@@ -354,7 +433,7 @@ def test_h5_base64_exfiltrated_decoy_is_caught_at_every_byte_phase(prefix_len):
 
 
 def test_h5_canary_tokens_still_match_the_literal_and_upper_forms():
-    canary = "d4" * 20
+    canary = "0f1e2d3c4b5a69788796a5b4c3d2e1f009182736"
     tokens = canary_tokens(canary)
     assert canary in tokens and canary.upper() in tokens
     assert "AKIA" + canary[:16].upper() in tokens
@@ -364,33 +443,28 @@ def test_h5_canary_fragments_are_long_enough_to_not_collide():
     assert min(len(t) for t in canary_tokens("d4" * 20)) >= 16
 
 
-def test_h5_overlap_suppression_is_not_quadratic(monkeypatch):
-    # Measured, not asserted from the shape of the code: count the pair comparisons. The old
-    # version scanned every kept finding for every candidate, so calls grew with n^2; bucketed
-    # by (item_ref, field) they grow with n. An untrusted server picks n.
-    from frisk.core import engine
+def test_h5_suppression_scales_across_many_items():
+    items = [_tool(f"tool_{i}", POISON) for i in range(400)]
+    findings = run_detectors(Inventory(items=items))
+    assert len({f.item_ref for f in findings if f.item_ref.startswith("tool:")}) == 400
 
-    calls = 0
-    real = engine._overlaps
 
-    def counting(a, b):
-        nonlocal calls
-        calls += 1
-        return real(a, b)
+def test_h5_suppression_scales_within_one_field():
+    """The axis an attacker actually controls: findings inside ONE description.
 
-    monkeypatch.setattr(engine, "_overlaps", counting)
-
-    def comparisons(n):
-        nonlocal calls
-        calls = 0
-        found = run_detectors(Inventory(items=[_tool(f"tool_{i}", POISON) for i in range(n)]))
-        assert len({f.item_ref for f in found if f.item_ref.startswith("tool:")}) == n
-        return calls
-
-    small, large = comparisons(200), comparisons(400)
-    # Doubling the inventory doubles the work when bucketed and quadruples it when not:
-    # measured here as 600 → 1200 (ratio 2.0); the unbucketed version was 179,700 → 719,400.
-    assert large < small * 3, f"{small} → {large} comparisons: growth is super-linear"
+    Bucketing by (item_ref, field) fixed the item-count axis and left this one quadratic —
+    every finding lands in the same bucket. A ~2 MB description then cost minutes of CPU,
+    and `--timeout` does not cover detection, only enumeration. Measured before the
+    binary-search index: 8000 findings took 3.97s and grew 4x per doubling. After: 0.17s,
+    growing 2x. The ceiling below is ~20x the linear figure, so it discriminates between the
+    two shapes by a wide margin while tolerating a slow CI runner.
+    """
+    inventory = Inventory(items=[_tool("t", "<IMPORTANT> " * 16000)])
+    start = time.perf_counter()
+    findings = run_detectors(inventory)
+    elapsed = time.perf_counter() - start
+    assert len(findings) > 16000, "vacuity guard: the fixture did not produce the findings"
+    assert elapsed < 10.0, f"{len(findings)} findings took {elapsed:.1f}s — growth is quadratic"
 
 
 def test_h5_suppression_still_suppresses_within_one_field():
