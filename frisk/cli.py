@@ -17,6 +17,7 @@ from frisk.core.baseline import (
     load_baseline,
     render_baseline,
 )
+from frisk.core.clientconfig import ConfigError, ConfiguredServer, parse_client_config
 from frisk.core.detectors import ALL_DETECTORS
 from frisk.core.engine import run_detectors
 from frisk.core.models import Finding, Inventory, Severity
@@ -45,7 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
         ("verify", "re-enumerate and diff against a frisk.lock baseline (rug-pull check)"),
     ):
         p = sub.add_parser(name, help=help_text)
-        p.add_argument("target", help="stdio command, or an http(s):// URL for a remote server")
+        p.add_argument(
+            "target",
+            nargs="?",
+            help="stdio command, or an http(s):// URL for a remote server",
+        )
         p.add_argument(
             "args",
             nargs=argparse.REMAINDER,
@@ -90,6 +95,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--baseline",
         metavar="PATH",
         help="accepted-finding baseline; matching findings are reported but do not gate",
+    )
+    scan.add_argument(
+        "--config",
+        metavar="PATH",
+        help=(
+            "scan every server declared in an MCP client config "
+            "(claude_desktop_config.json / .mcp.json) instead of a single target"
+        ),
     )
     scan.add_argument(
         "--write-baseline",
@@ -163,7 +176,12 @@ def _build_target(args: argparse.Namespace) -> Target:
     # stdio: env is intentionally empty — the sandbox layers a benign allowlist on top and
     # forces a fake HOME, so the untrusted server never inherits frisk's own secrets (S3).
     stdio_args = [a for a in args.args if a != "--"]
-    return StdioTarget(command=target, args=stdio_args, env={}, cwd=os.getcwd())
+    # env is empty for a hand-typed target: the sandbox layers a benign allowlist on top and
+    # forces a fake HOME, so the untrusted server never inherits frisk's own secrets (S3).
+    # A --config entry is different — its `env` is exactly what the CLIENT would pass, so
+    # withholding it would scan a server in a state it never actually runs in.
+    declared = getattr(args, "declared_env", None) or {}
+    return StdioTarget(command=target, args=stdio_args, env=declared, cwd=os.getcwd())
 
 
 def _warn(args: argparse.Namespace, message: str) -> None:
@@ -220,7 +238,91 @@ def _load_baseline(path: str) -> Baseline:
     return load_baseline(text)
 
 
+def _target_args_for(args: argparse.Namespace, server: ConfiguredServer) -> argparse.Namespace:
+    """A per-server copy of the parsed args, so one config entry scans exactly like a
+    single target would — same sandbox, same timeout, same honeypot."""
+    per = argparse.Namespace(**vars(args))
+    per.target = server.url if server.is_remote else server.command
+    per.args = list(server.args)
+    per.declared_env = dict(server.env)
+    per.config = None
+    return per
+
+
+def _scan_config(args: argparse.Namespace) -> int:
+    """Scan every server a client config declares (R36).
+
+    One server failing to enumerate does NOT abort the others: the point of this mode is a
+    picture of the whole setup, and a single broken entry must not hide the state of the
+    rest. A failure is reported as a failed entry and gates the exit code (R6) — it is never
+    quietly treated as clean.
+    """
+    try:
+        text = Path(args.config).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise UsageError(f"cannot read config {args.config}: {type(exc).__name__}") from None
+    servers = parse_client_config(text)
+
+    baseline = _load_baseline(args.baseline) if args.baseline else None
+    fail_on = parse_fail_on(args.fail_on)
+    worst = 0
+    sections: list[str] = []
+
+    for server in servers:
+        header = f"═══ {c0_escape(server.name)} ═══"
+        if server.disabled:
+            sections.append(f"{header}\ndisabled in the config — not scanned\n")
+            continue
+        per = _target_args_for(args, server)
+        try:
+            inventory, honeypot = _enumerate(per)
+        except ConnectorError as exc:
+            # Reported, not fatal, and it still gates: "could not be assessed" is never
+            # the same as "clean".
+            sections.append(f"{header}\nERROR: {exc}\n")
+            worst = max(worst, EXIT_OPERATIONAL_ERROR)
+            continue
+        findings = run_detectors(inventory, ALL_DETECTORS) + honeypot
+        if baseline is not None:
+            split = apply_baseline(findings, baseline)
+            gating, accepted, stale = split.gating, split.accepted, split.stale
+        else:
+            gating, accepted, stale = findings, [], []
+        assessment = assess(gating)
+        worst = max(worst, exit_code(assessment, fail_on))
+        sections.append(
+            header
+            + "\n"
+            + render_human(
+                inventory,
+                gating,
+                assessment,
+                accepted=accepted,
+                stale=stale,
+                fail_on=args.fail_on,
+            )
+        )
+
+    sys.stdout.write(
+        f"frisk — {len(servers)} server{'' if len(servers) == 1 else 's'} from "
+        f"{c0_escape(args.config)}\n\n" + "\n".join(sections)
+    )
+    return worst
+
+
 def _cmd_scan(args: argparse.Namespace) -> int:
+    if args.config:
+        if args.target:
+            raise UsageError(
+                "give either a target or --config, not both — --config already says which "
+                "servers to scan"
+            )
+        if args.format != "human":
+            raise UsageError(f"--config currently supports --format human, not {args.format!r}")
+        return _scan_config(args)
+    if not args.target:
+        raise UsageError("no target given: frisk scan <command-or-url>, or --config <path>")
+
     inventory, honeypot_findings = _enumerate(args)
     all_findings = run_detectors(inventory, ALL_DETECTORS) + honeypot_findings
 
@@ -285,6 +387,8 @@ def _honeypot_line(f: Finding) -> str:
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
+    if not args.target:
+        raise UsageError("no target given: frisk verify <command-or-url>")
     locked = read_lock(args.lock)
     inventory, honeypot_findings = _enumerate(args)
     diff = diff_lock(locked, inventory)
@@ -310,7 +414,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "scan":
             return _cmd_scan(args)
         return _cmd_verify(args)
-    except (ConnectorError, LockError, UsageError, BaselineError) as exc:
+    except (ConnectorError, LockError, UsageError, BaselineError, ConfigError) as exc:
         # Fail loud, never "clean": a specific, actionable error and a non-zero exit (R6).
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_OPERATIONAL_ERROR

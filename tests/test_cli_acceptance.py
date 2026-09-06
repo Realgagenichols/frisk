@@ -404,3 +404,61 @@ def test_sarif_format_is_valid_and_names_every_rule_it_uses():
     assert run["invocations"][0]["properties"]["verdict"] == "fail"
     # S3: no decoy or credential material anywhere in a file another tool will ingest.
     assert "PRIVATE KEY" not in result.stdout
+
+
+def _write_config(tmp_path, **servers):
+    path = tmp_path / "mcp.json"
+    path.write_text(json.dumps({"mcpServers": servers}), encoding="utf-8")
+    return path
+
+
+def _fixture_server(mode):
+    return {
+        "command": sys.executable,
+        "args": ["-m", "tests.fixtures.mcp_server", "--mode", mode],
+    }
+
+
+def test_config_scans_every_server_and_one_failure_does_not_abort_the_rest(tmp_path):
+    """R36: the point of this mode is a picture of the WHOLE setup, so a single broken entry
+    must not hide the state of the others — while still gating the exit code (R6)."""
+    config = _write_config(
+        tmp_path,
+        benign=_fixture_server("benign"),
+        poisoned=_fixture_server("poisoned"),
+        broken={"command": "/nonexistent/frisk-no-such-server"},
+        off={**_fixture_server("benign"), "disabled": True},
+    )
+    result = run_frisk("scan", "--no-lock", "--quiet", "--config", str(config))
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "4 servers from" in result.stdout
+    for name in ("benign", "poisoned", "broken", "off"):
+        assert name in result.stdout
+    assert result.stdout.count("verdict:") == 2  # the two that enumerated
+    assert "ERROR:" in result.stdout                # the broken one, reported not fatal
+    assert "disabled in the config" in result.stdout
+
+
+def test_config_of_only_healthy_servers_exits_zero(tmp_path):
+    config = _write_config(tmp_path, a=_fixture_server("benign"), b=_fixture_server("benign"))
+    result = run_frisk("scan", "--no-lock", "--quiet", "--config", str(config))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_config_and_a_target_together_is_a_usage_error(tmp_path):
+    config = _write_config(tmp_path, a=_fixture_server("benign"))
+    result = run_frisk("scan", "--no-lock", "--config", str(config), "/bin/echo")
+    assert result.returncode == 2
+    assert "not both" in result.stderr
+
+
+def test_no_target_and_no_config_is_a_usage_error():
+    result = run_frisk("scan", "--no-lock")
+    assert result.returncode == 2
+    assert "no target given" in result.stderr
+
+
+def test_unreadable_config_fails_loudly(tmp_path):
+    result = run_frisk("scan", "--no-lock", "--config", str(tmp_path / "missing.json"))
+    assert result.returncode == 2
+    assert "cannot read config" in result.stderr
