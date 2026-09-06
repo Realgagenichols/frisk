@@ -9,7 +9,14 @@ try:
     # `frisk_version`, and a hand-copied constant drifts from pyproject silently — a report
     # that misstates which version produced it is worse than one with no version at all.
     __version__ = version("mcp-frisk")
-except PackageNotFoundError:  # running from a source tree with no install
-    __version__ = "0.0.0+unknown"
+except PackageNotFoundError:
+    # No installed distribution to read. That is the Pyodide playground, where the core is
+    # unpacked from a zip rather than pip-installed — and a report stamped "0.0.0+unknown"
+    # tells a reader nothing about which detectors produced it. The site build writes the
+    # resolved version into the bundle for exactly this case.
+    try:
+        from frisk._bundled_version import __version__  # type: ignore[no-redef]
+    except ImportError:  # a source tree with neither an install nor a bundle
+        __version__ = "0.0.0+unknown"
 
 __all__ = ["__version__"]
