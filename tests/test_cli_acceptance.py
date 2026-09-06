@@ -149,3 +149,38 @@ def test_scan_unwritable_lock_warns_but_keeps_verdict(tmp_path):
     assert result.returncode == 2  # verdict preserved
     assert "could not write lockfile" in result.stderr
     assert "Traceback" not in result.stderr  # degraded gracefully
+
+
+def test_verify_catches_a_rug_pull_hidden_behind_a_duplicate_name(tmp_path):
+    """R14/R28 end to end: a poisoned twin swapped in under an existing name.
+
+    The baseline holds two definitions called `search_docs`. The server then poisons the
+    FIRST of them and leaves the count and the second twin alone. A lockfile keyed by ref in
+    a dict kept only the last line, so this diffed clean and verify exited 0.
+    """
+    lock = tmp_path / "frisk.lock"
+    scan = run_frisk(*scan_args("twins", "--lock", str(lock)))
+    assert scan.returncode in (0, 1), scan.stdout + scan.stderr
+    twin_lines = [ln for ln in lock.read_text().splitlines() if ln.endswith("tool:read_notes")]
+    assert len(twin_lines) == 2, "a duplicate definition was dropped from the baseline"
+    assert twin_lines[0] != twin_lines[1], "the twins should hash differently"
+
+    verified = run_frisk(*verify_args("twins-swapped", "--lock", str(lock)))
+    assert verified.returncode == 2, verified.stdout + verified.stderr
+    assert "mutated" in verified.stdout
+    assert "DRIFT" in verified.stdout
+
+
+def test_scan_flags_duplicate_definition_names(tmp_path):
+    result = run_frisk(*scan_args("twins", "--lock", str(tmp_path / "frisk.lock")))
+    assert "D5" in result.stdout
+    assert "same name" in result.stdout
+
+
+def test_verify_unchanged_twins_is_not_drift(tmp_path):
+    # P21: the duplicate-aware diff must not report drift merely because a name repeats.
+    lock = tmp_path / "frisk.lock"
+    run_frisk(*scan_args("twins", "--lock", str(lock)))
+    verified = run_frisk(*verify_args("twins", "--lock", str(lock)))
+    assert verified.returncode == 0, verified.stdout + verified.stderr
+    assert "OK" in verified.stdout
