@@ -3,6 +3,7 @@
 </p>
 
 <p align="center">
+  <a href="https://pypi.org/project/mcp-frisk/"><img alt="PyPI" src="https://img.shields.io/pypi/v/mcp-frisk?color=3775A9&logo=pypi&logoColor=white"></a>
   <a href="#"><img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white"></a>
   <a href="#"><img alt="Built on MCP" src="https://img.shields.io/badge/built%20on-MCP-58A6FF"></a>
   <a href="https://github.com/Realgagenichols/frisk/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Realgagenichols/frisk/actions/workflows/ci.yml/badge.svg"></a>
@@ -128,21 +129,24 @@ frisk scan ──▶ ┌─ sandbox: no network · fake $HOME + decoy creds · s
 ## Install
 
 ```bash
-# run it without installing anything
-uvx --from git+https://github.com/Realgagenichols/frisk frisk scan npx -y @acme/weather-mcp
-
-# or install the CLI on your PATH
-uv tool install git+https://github.com/Realgagenichols/frisk
-
-# or work from a clone
-git clone https://github.com/Realgagenichols/frisk.git && cd frisk && uv sync
+pip install mcp-frisk        # or:  uv add mcp-frisk
 ```
 
-> **Not on PyPI yet.** The distribution will be **`mcp-frisk`** — the bare name `frisk` is
-> taken by an unrelated bioinformatics package — while the command and the import package
-> are both **`frisk`**. Same split as its sibling
-> [`mcp-tollbooth`](https://pypi.org/project/mcp-tollbooth/). Once published:
-> `pip install mcp-frisk`, or `uvx --from mcp-frisk frisk --help`.
+Or run it without installing anything:
+
+```bash
+uvx --from mcp-frisk frisk scan npx -y @acme/weather-mcp
+```
+
+> The distribution is **`mcp-frisk`** (the bare name `frisk` belongs to an unrelated
+> bioinformatics package); the command and the import package are both **`frisk`**. Same
+> split as its sibling [`mcp-tollbooth`](https://pypi.org/project/mcp-tollbooth/).
+
+Or work from a clone:
+
+```bash
+git clone https://github.com/Realgagenichols/frisk.git && cd frisk && uv sync
+```
 
 ## Quickstart
 
