@@ -1,0 +1,48 @@
+name: Publish to PyPI
+
+# Publishes a release to PyPI via Trusted Publishing (OIDC) — no long-lived tokens. Fires
+# when a version tag is pushed (e.g. `git tag v0.1.0 && git push --tags`).
+#
+# One-time setup on PyPI. `mcp-frisk` does not exist there yet, so this is a PENDING
+# publisher (Your account → Publishing → Add a pending publisher), matching exactly:
+#   PyPI project:  mcp-frisk
+#   Owner:         Realgagenichols
+#   Repository:    frisk
+#   Workflow:      release.yml
+#   Environment:   pypi
+# It becomes a normal trusted publisher the moment the first release lands.
+#
+# The tests run again here rather than trusting the CI run on the branch: a tag can point at
+# a commit CI never saw, and PyPI uploads cannot be undone or re-uploaded under the same
+# version number.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/mcp-frisk
+    permissions:
+      id-token: write # required for Trusted Publishing
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
