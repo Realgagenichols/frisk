@@ -390,3 +390,17 @@ def test_json_with_quiet_is_pipeable(tmp_path):
     doc = json.loads(result.stdout)  # nothing but JSON on stdout
     assert doc["fail_on"] == "high"
     assert result.stderr == ""
+
+
+def test_sarif_format_is_valid_and_names_every_rule_it_uses():
+    result = run_frisk(*scan_args("poisoned", "--format", "sarif", "--no-lock", "--quiet"))
+    assert result.returncode == 2
+    assert result.stderr == "", "machine formats must leave stderr clean for piping"
+    doc = json.loads(result.stdout)
+    run = doc["runs"][0]
+    assert doc["version"] == "2.1.0"
+    declared = {r["id"] for r in run["tool"]["driver"]["rules"]}
+    assert {r["ruleId"] for r in run["results"]} == declared
+    assert run["invocations"][0]["properties"]["verdict"] == "fail"
+    # S3: no decoy or credential material anywhere in a file another tool will ingest.
+    assert "PRIVATE KEY" not in result.stdout

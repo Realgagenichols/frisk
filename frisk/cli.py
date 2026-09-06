@@ -22,6 +22,7 @@ from frisk.core.engine import run_detectors
 from frisk.core.models import Finding, Inventory, Severity
 from frisk.core.report import render_human, render_json
 from frisk.core.sanitize import c0_escape
+from frisk.core.sarif import render_sarif
 from frisk.core.score import Assessment, assess, exit_code, parse_fail_on
 from frisk.lockfile import LockError, diff_lock, read_lock, render_diff, write_lock
 from frisk.sandbox import SandboxOptions, inspect_decoys, prepare_stdio, scan_for_canary
@@ -74,7 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
 
     scan = sub.choices["scan"]
-    scan.add_argument("--format", choices=["human", "json"], default="human")
+    scan.add_argument("--format", choices=["human", "json", "sarif"], default="human")
     scan.add_argument("--no-lock", action="store_true", help="do not write a frisk.lock")
     scan.add_argument(
         "--fail-on",
@@ -251,7 +252,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
     assessment: Assessment = assess(gating)
     fail_on = parse_fail_on(args.fail_on)
-    renderer = render_json if args.format == "json" else render_human
+    renderer = {"json": render_json, "sarif": render_sarif}.get(
+        args.format, render_human
+    )
     sys.stdout.write(
         renderer(
             inventory,
@@ -265,7 +268,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if not args.no_lock:
         try:
             write_lock(args.lock, inventory)
-            if args.format != "json" and not args.quiet:
+            if args.format == "human" and not args.quiet:
                 print(f"\nwrote lockfile: {args.lock}", file=sys.stderr)
         except OSError as exc:
             # The verdict is the primary output; a failed lockfile write is a warning, not a

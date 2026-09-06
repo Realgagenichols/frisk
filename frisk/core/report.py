@@ -17,7 +17,7 @@ from frisk.core.models import Finding, Inventory, ItemKind
 from frisk.core.sanitize import c0_escape
 from frisk.core.score import Assessment
 
-_DETECTOR_LABELS = {
+DETECTOR_LABELS = {
     "D1": "instruction-injection",
     "D2": "hidden-content",
     "D3": "sensitive-params",
@@ -72,7 +72,7 @@ def render_human(
     lines.append("")
 
     for f in sorted(findings, key=lambda f: (-f.severity, f.detector, f.item_ref, f.field)):
-        label = _DETECTOR_LABELS.get(f.detector, f.detector)
+        label = DETECTOR_LABELS.get(f.detector, f.detector)
         where = f"{c0_escape(f.item_ref)} · {c0_escape(f.field)}"
         if f.evidence.offset is not None:
             where += f" @ byte {f.evidence.offset}"
