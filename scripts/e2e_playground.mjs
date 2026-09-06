@@ -27,6 +27,15 @@ const page = await browser.newPage();
 const origins = new Set();
 page.on("request", (req) => origins.add(new URL(req.url()).origin));
 
+// Anything the Content-Security-Policy blocks. The page's own styling depends on the CSP
+// being compatible with how app.js applies custom properties.
+const cspViolations = [];
+page.on("console", (m) => {
+  if (/violates the following Content Security Policy/i.test(m.text())) {
+    cspViolations.push(m.text().slice(0, 120));
+  }
+});
+
 await page.goto(BASE);
 await page.waitForSelector("#boot-status.ready", { timeout: 120000 });
 console.log("boot: ready");
@@ -55,6 +64,16 @@ if (!rawSummary.startsWith("OFFICIAL COPY")) throw new Error(`raw-report summary
 const detectors = await page.$$eval(".finding-ref",
   (els) => [...new Set(els.map((e) => e.textContent.replace(/^ref /, "")))].sort());
 console.log("poisoned: DENIED,", failScore.trim(), "detectors:", detectors.join(","));
+// Severity colour is delivered through a --sev custom property. A strict `style-src 'self'`
+// silently drops the `style` ATTRIBUTE, so this shipped once with every finding uncoloured
+// while every text assertion still passed — check the COMPUTED value, not the markup.
+const sevVar = await page.$eval(".finding", (el) => getComputedStyle(el).getPropertyValue("--sev").trim());
+const chipColor = await page.$eval(".sev-chip", (el) => getComputedStyle(el).color);
+if (!sevVar) throw new Error("--sev custom property is empty — severity colour was dropped");
+if (chipColor === "rgba(0, 0, 0, 0)" || !chipColor) throw new Error(`sev-chip has no colour: ${chipColor}`);
+console.log("severity colour: --sev =", sevVar, "| chip colour =", chipColor);
+if (cspViolations.length) throw new Error("CSP blocked something: " + cspViolations[0]);
+console.log("csp: no violations");
 await page.waitForTimeout(900); // let stamp/row animations settle — screenshots show the final state
 await page.screenshot({ path: SHOTS + "/playground-poisoned.png", fullPage: true });
 

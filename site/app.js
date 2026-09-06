@@ -42,8 +42,18 @@ function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
     if (key === "class") node.className = value;
-    else if (key === "style") node.setAttribute("style", value);
-    else node.setAttribute(key, value);
+    else if (key === "style") {
+      // Set custom properties through the CSSOM, not as a `style` ATTRIBUTE. A strict
+      // `style-src 'self'` blocks the attribute — which silently dropped every finding's
+      // severity colour when the CSP landed — while CSSOM mutation is permitted. These are
+      // all custom properties (--sev, --i) that the stylesheet reads.
+      for (const declaration of value.split(";")) {
+        const [property, ...rest] = declaration.split(":");
+        if (property && rest.length) {
+          node.style.setProperty(property.trim(), rest.join(":").trim());
+        }
+      }
+    } else node.setAttribute(key, value);
   }
   for (const child of children) {
     node.append(child instanceof Node ? child : document.createTextNode(String(child)));

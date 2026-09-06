@@ -209,7 +209,11 @@ def test_csp_confines_the_page_to_itself_plus_the_pinned_cdn():
     # and styles/fonts/images are same-origin only.
     assert policy["form-action"] == "'none'"
     assert policy["style-src"] == "'self'" and policy["font-src"] == "'self'"
-    assert policy["object-src"] == "'none'" and policy["frame-ancestors"] == "'none'"
+    assert policy["object-src"] == "'none'"
+    # frame-ancestors is deliberately absent: a meta tag cannot deliver it, and GitHub Pages
+    # sends no custom headers, so declaring it would only emit a console warning that reads
+    # like a misconfiguration.
+    assert "frame-ancestors" not in policy
 
 
 def test_csp_script_src_names_exactly_the_origin_app_js_loads():
