@@ -6,6 +6,10 @@ Notable changes to `mcp-frisk`. Dates are release dates; the format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.0] — 2026-09-07
+
 ### Added
 
 - **`--fail-on {info,low,medium,high,critical}`** — the lowest severity that exits `2`.
@@ -28,6 +32,9 @@ Notable changes to `mcp-frisk`. Dates are release dates; the format follows
 
 ### Changed
 
+- **The JSON report gained `fail_on`, `accepted` and `stale_baseline_entries` keys.**
+  Additive — nothing was removed or renamed — but a consumer validating against an exact set
+  of keys will need updating.
 - GitHub Actions are pinned to commit SHAs, with Dependabot to keep them moving.
 
 ### Fixed
@@ -82,5 +89,6 @@ First public release.
 - An unexpected failure exits `2`, never `1` — a crash must not read as the milder
   "warnings" result.
 
-[Unreleased]: https://github.com/Realgagenichols/frisk/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Realgagenichols/frisk/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Realgagenichols/frisk/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Realgagenichols/frisk/releases/tag/v0.1.0
